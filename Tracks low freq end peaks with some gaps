@@ -1,0 +1,171 @@
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.signal import find_peaks
+from scipy.signal import savgol_filter #for smoothing spiky graphs
+
+ts = np.loadtxt('TimeAxis.dat')
+fs = np.loadtxt('FrequencyAxis.dat')
+spectrum = np.loadtxt('SpectrumArray.dat')
+spectrum = np.log10(spectrum)  # makes it easier to see features without changing contrast
+
+p = np.argmin(abs(ts-(10.45)))
+array=[]
+old_peaks=[]
+old_peaks2=[]
+k=2600 #2245
+q=1
+arraylength=0
+while k<2929: #2929:
+	smooth=savgol_filter(spectrum[:,k], window_length=15,  polyorder=3)
+	peaks=find_peaks(spectrum[:,k], distance=12,height=-3.8)
+	peak_freq=peaks[0]*(500/2048)
+	#peaks=find_peaks(smooth, distance=10.5,height=-3.7, width=5) #was at helight -3.8 and width 2
+	#plt.plot(spectrum[:,k], color='blue')
+	#plt.plot(smooth, color='red')
+	#plt.axhline(y=-3.7, color='yellow', linestyle='-')
+	#plt.plot(peaks[0], spectrum[:,k][peaks[0]], color='yellow',marker='x', linestyle='none',label=k)
+	#plt.legend()
+	#plt.show()
+	
+	#adding counting index in array
+	if len(array)>arraylength:
+		q=q+1
+	arraylength=len(array)
+	
+	#removing some noise
+	a=0
+	while a<len(old_peaks):
+		b=0
+		while b<len(peak_freq):
+			c=0
+			while c<len(old_peaks2):
+				if abs(peak_freq[b]-old_peaks[a])<=1.5 or abs(old_peaks2[c]-old_peaks[a])<=1.5:
+					array.append([q,k-1,old_peaks[a]])
+					c=len(old_peaks2)
+					b=len(peak_freq)
+				else:
+					c=c+1
+			b=b+1
+		a=a+1
+			
+	old_peaks2=old_peaks
+	old_peaks=peak_freq
+	k=k+1
+
+np.savetxt('array.txt',array,delimiter=',')
+
+#setting initial array1 and array2 
+array1=[]
+array2=[]
+j=0
+while j<len(array):
+	if array[j][0]==1:
+		array1.append([array[j][1],array[j][2]]) #array1=[time,freq] of peaks with time index t-2
+	if array[j][0]==2:
+		array2.append([array[j][1],array[j][2]])  #array2=[time,freq] of peaks with time index t-1 
+	j=j+1	
+
+array4=[]
+array4.append([0,0,0])
+array4.append([0,0,0])#makes array4 a 2D array
+t=3
+i=0 #mode index
+while t<=array[-1][0]:
+	array3=[]
+	j=0
+	#setting array 3
+	while j<len(array):
+		if array[j][0]==t:
+			array3.append([array[j][1],array[j][2]])  #array3=[time,freq] of peaks with time index t
+		j=j+1
+	#print('\n\narray1',array1,'\narray2',array2,'\narray3',array3)
+	a=0
+	while a<len(array1):
+		z=0
+		b=0
+		while b<len(array2):
+			if abs(array1[a][1]-array2[b][1])<1:
+				x=0 #allows the starting of while loop below
+				z=1
+			else:
+				x=len(array4)#doesnt allow the starting of while loop below
+				if b==len(array2)-1 and z==0: #z part stops a new point  being made if a near point has already been found
+					c=0
+					while c<len(array3):
+						if abs(array1[a][1]-array3[c][1])<1.5: #checks if out of range point was anomalous
+							d=0
+							array22=[]
+							while d<len(array2):
+								if abs(array2[d][1]-array3[c][1])<1.5:
+									#array2=np.delete(array2,d,0)
+									d=d+1
+									b=b-1
+								
+								else:
+									array22.append(array2[d])
+									d=d+1
+							array2=array22
+							array2.append([array2[0][0],(array1[a][1]+array3[c][1])/2]) #adds a point in between
+							c=c+1
+						else:
+							c=c+1
+			#print(array1[a][1],array2[b][1],array1[a][1]-array2[b][1])
+			#print(x)
+
+			while x<len(array4): #array4: mode index i, time, freq
+				if array1[a][0]==array4[x][1] and array1[a][1]==array4[x][2]: #searches for if its mode has already been recorded 
+					array4.append([array4[x][0],array2[b][0],array2[b][1]])
+					x=len(array4) #ends for loop
+				else:				
+					if x==len(array4)-1:
+						i=i+1 #creates new mode index
+						array4.append([i,array2[b][0],array2[b][1]]) #adds new mode to array4
+						x=len(array4) #ends loop
+					else:
+						x=x+1 #goes to next row of array4
+
+			b=b+1
+		a=a+1
+	
+	array1=array2
+	array2=array3
+	t=t+1
+
+array4.sort() #sorts array4 in order of mode index number
+np.savetxt('array4',array4,delimiter=',')
+
+q=0
+array5=[]
+while q<len(array4):
+	if array4[q][0]==128 or array4[q][0]==155 or array4[q][0]==156 or array4[q][0]==175 or array4[q][0]==392 or array4[q][0]==380:
+		array5.append([array4[q][1],array4[q][2]])
+		q=q+1
+	else:
+		q=q+1	
+
+q=0
+array6=[]
+while q<len(array4):
+	if array4[q][0]==194 or array4[q][0]==116 or array4[q][0]==61 or array4[q][0]==332:
+		array6.append([array4[q][1],array4[q][2]])
+		q=q+1
+	else:
+		q=q+1		
+
+#plots final image
+cMap = plt.get_cmap('inferno') # colormap to use for 2D plot
+j=0
+k=0
+plt.figure(figsize=(8,6))#(15,9))
+plt.imshow(spectrum, interpolation='nearest', cmap=cMap, extent=[ts.min(), ts.max(), fs.min(), fs.max()], aspect='auto', origin='lower')
+plt.xlabel('$t$ $[s]$')
+plt.ylabel('$f$ $[kHz]$')
+plt.colorbar(label=r'Amplitude [a.u.]')
+while j<len(array5):
+	plt.scatter(ts[array5[j][0]],array5[j][1], c='blue',marker='o',s=2)
+	j=j+1
+while k<len(array6):
+	plt.scatter(ts[array6[k][0]],array6[k][1], c='green',marker='o',s=2)
+	k=k+1
+plt.scatter(ts[2208],260.0097656, c='red',marker='o',s=2)
+plt.show()
