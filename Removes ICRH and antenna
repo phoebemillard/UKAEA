@@ -1,0 +1,217 @@
+import timeit
+start = timeit.default_timer()
+import matplotlib.pyplot as plt
+import numpy as np;
+import random
+from scipy.signal import find_peaks
+from scipy.signal import savgol_filter #for smoothing spiky graphs
+import timeit
+from scipy import interpolate
+
+ts = np.loadtxt('TimeAxis.dat')
+fs = np.loadtxt('FrequencyAxis.dat')
+ta = np.loadtxt('AntennaTime.dat')
+fa = np.loadtxt('AntennaFreq.dat')
+antenna = interpolate.interp1d(ta, fa) #interpolates antenna signal
+ti = np.loadtxt('ICRHTime.dat')
+fi = np.loadtxt('ICRHFreq.dat')
+ICRH = interpolate.interp1d(ti, fi) #interpolates ICRH signal
+spectrum = np.loadtxt('SpectrumArray.dat')
+spectrum = np.log10(spectrum)  # makes it easier to see features without changing contrast
+
+Remove = np.stack((np.append(ts[(ts>=ti[0])*(ts<=ti[-1])],ts[(ts>=ta[0])*(ts<=ta[-1])]),  np.append(ICRH(ts[(ts>=ti[0])*(ts<=ti[-1])]),antenna(ts[(ts>=ta[0])*(ts<=ta[-1])]))),axis=1) #Combines the ICRH and Antenna signals
+np.savetxt('remove.txt',Remove,delimiter=',') 
+
+p = np.argmin(abs(ts-(8.12)))
+array=[]
+old_peaks=[]
+old_peaks2=[]
+k=0
+q=1
+arraylength=0
+while k<len(ts):
+	#smooth=savgol_filter(spectrum[:,k], window_length=15,  polyorder=3)
+	peaks=find_peaks(spectrum[:,k], distance=12,height=-3.8)
+	peak_freq=peaks[0]*(500/len(spectrum))
+	#peaks=find_peaks(smooth, distance=10.5,height=-3.7, width=5) #was at helight -3.8 and width 2
+	#plt.plot(spectrum[:,k], color='blue')
+	#plt.plot(smooth, color='red')
+	#plt.axhline(y=-3.7, color='yellow', linestyle='-')
+	#plt.plot(peaks[0], spectrum[:,k][peaks[0]], color='yellow',marker='x', linestyle='none',label=k)
+	#plt.legend()
+	#plt.show()
+	
+	
+	#adding counting index in array
+	if len(array)>arraylength:
+		q=q+1
+	arraylength=len(array)
+	
+	#removing some noise
+	a=0
+	while a<len(old_peaks):
+		b=0
+		while b<len(peak_freq):
+			c=0
+			while c<len(old_peaks2):
+				if abs(peak_freq[b]-old_peaks[a])<=1.5 or abs(old_peaks2[c]-old_peaks[a])<=1.5:
+					array.append([q,k-1,old_peaks[a],ts[k-1]])
+					c=len(old_peaks2)
+					b=len(peak_freq)
+				else:
+					c=c+1
+			b=b+1
+		a=a+1
+			
+	old_peaks2=old_peaks
+	old_peaks=peak_freq
+	k=k+1
+
+np.savetxt('array.txt',array,delimiter=',')
+
+#setting initial array1 and array2 
+array1=[]
+array2=[]
+j=0
+while array[j][0]<3:
+	if array[j][0]==1:
+		array1.append([array[j][1],array[j][2]]) #array1=[time,freq] of peaks with time index t-2
+	if array[j][0]==2:
+		array2.append([array[j][1],array[j][2]])  #array2=[time,freq] of peaks with time index t-1 
+	j=j+1	
+
+array4=[]
+array4.append([0,0,0])
+array4.append([0,0,0])#makes array4 a 2D array
+t=3
+x=0
+u=2
+v=0
+i=0 #mode index
+while t<=array[-1][0]:
+	#print(t)
+	
+	#setting array 3
+	array3=[]
+	q=0
+	while array[j][0]<t+1 and q==0:
+		array3.append([array[j][1],array[j][2]])  #array3=[time,freq] of peaks with time index t
+		if j<len(array)-1:
+			j=j+1
+		else:
+			q=1 #ends loop
+	
+	#print('\n\narray1',array1,'\narray2',array2,'\narray3',array3)
+	
+	a=0
+	while a<len(array1):
+		z=0
+		b=0
+		while b<len(array2):
+			if abs(array1[a][1]-array2[b][1])<1:
+				y=0 #allows the starting of while loop below
+				z=1
+			else:
+				y=1#doesnt allow the starting of while loop below
+				if b==len(array2)-1 and z==0: #z part stops a new point  being made if a near point has already been found
+					c=0
+					while c<len(array3):
+						if abs(array1[a][1]-array3[c][1])<1.5: #checks if out of range point was anomalous
+							d=0
+							array22=[]
+							while d<len(array2):
+								if abs(array2[d][1]-array3[c][1])<1.5:
+									d=d+1
+									b=b-1
+								
+								else:
+									array22.append(array2[d])
+									d=d+1
+							array2=array22
+							if len(array2)>=1:
+								array2.append([array2[0][0],(array1[a][1]+array3[c][1])/2]) #adds a point in between
+							c=c+1
+						else:
+							c=c+1
+			#print(array1[a][1],array2[b][1],array1[a][1]-array2[b][1])
+
+			if y==0:
+				x=v
+				#print(array4)
+				while x<u: #array4: mode index i, time, freq
+					if array1[a][0]==array4[x][1] and array1[a][1]==array4[x][2]: #searches for if its mode has already been recorded 
+						array4.append([array4[x][0],array2[b][0],array2[b][1]])
+						x=u #ends for loop
+					else:				
+						if x==u-1:
+							i=i+1 #creates new mode index
+							array4.append([i,array2[b][0],array2[b][1]]) #adds new mode to array4
+							x=u #ends loop
+						else:
+							x=x+1 #goes to next row of array4
+
+			b=b+1
+		a=a+1
+	if u!=len(array4):
+		v=u
+	u=len(array4)
+	array1=array2
+	array2=array3
+	t=t+1
+ 
+
+array4.sort() #sorts array4 in order of mode index number
+np.savetxt('array4',array4,delimiter=',')
+print('plotting image...')
+
+#plots final image
+pulse=np.loadtxt('Pulse_number.txt')
+cMap = plt.get_cmap('inferno') # colormap to use for 2D plot
+colmap=plt.get_cmap('gist_rainbow')
+j=0
+k=0
+plt.figure(figsize=(8,6))#(15,9))
+plt.imshow(spectrum, interpolation='nearest', cmap=cMap, extent=[ts.min(), ts.max(), fs.min(), fs.max()], aspect='auto', origin='lower')
+plt.xlabel('$t$ $[s]$')
+plt.ylabel('$f$ $[kHz]$')
+plt.colorbar(label=r'Amplitude [a.u.]')
+plt.title(('Pulse number:',pulse[0]))
+
+j=0
+i=0
+z=0
+while j<array4[-1][0]:
+	col=random.random()*0.7+0.3
+	array0=[]
+	array10=[]
+	while array4[i][0]==j:
+		array0.append([int(array4[i][1]),array4[i][2],ts[array4[i][1]]])
+		array10.append(array4[i][2])
+		i=i+1
+	array0=np.array(array0)
+	if len(array0)>=30:
+		y=0 #counter for array0 index to see if it matches antenna signal 
+		x=z #counter for remove array index
+		while y<len(array0):
+			while x<len(Remove):
+				if abs(array0[y][1]-Remove[x][1])<1.2 and array0[y][2]==Remove[x][0]:
+					array0 = np.delete(array0, (y), axis=0)
+					Remove = np.delete(Remove, (x), axis=0)
+					z=x
+					if len(array0)==0: #ends loop 
+						x=len(Remove)
+						y=len(array0)
+				else:
+					x=x+1
+					if x==len(Remove):
+						y=len(array0)
+						z=0
+
+		plt.scatter(array0[:,2],array0[:,1],c=np.array([colmap(col)]),s=2)
+	j=j+1
+
+#plt.scatter(Remove[:,0],Remove[:,1],c='green', s=2)
+stop = timeit.default_timer()
+print('Time: ', stop - start)  
+#plt.xlim(6,12)
+plt.show()
