@@ -1,0 +1,288 @@
+from getdat import *
+import matplotlib.pyplot as plt
+from scipy.signal import get_window, spectrogram
+from scipy.fftpack import fft, fftfreq
+import numpy as np
+from ppf import ppfget
+from scipy import interpolate
+import math
+from scipy import interpolate
+from copy import deepcopy
+from itertools import combinations
+from scipy.sparse import csr_matrix
+from scipy import signal
+import matplotlib.gridspec as gridspec
+#----------------------------------------------------------------------------------------------------------------
+def phase_coherence(spectrum0,spectrum1):
+	f,csd=signal.csd(spectrum0,spectrum1)
+	f_xx,csd_xx=signal.csd(spectrum0,spectrum0)
+	f_yy,csd_yy=signal.csd(spectrum1,spectrum1)
+	coh_time=csd/np.sqrt(csd_xx*csd_yy)
+	output=coh_time
+	phase_time=np.angle(coh_time)
+	phase_time_int=[]
+	coh_time_int=[]
+	i=0
+	for step in phase_time:
+		interpolate=np.arange(0,len(spectrum0[0]))
+		original=np.linspace(0,len(spectrum0[0]),len(phase_time[0]))	
+		new=np.interp(interpolate,original,phase_time[i])
+		phase_time_int.append(new)
+		coh_time_int.append(np.interp(interpolate,original,coh_time[i]))
+		i+=1
+
+	spectrum0_f=np.transpose(spectrum0)
+	spectrum1_f=np.transpose(spectrum1)
+
+	f_f,csd_f=signal.csd(spectrum0_f,spectrum1_f,nfft=1500)
+	f_xxf,csd_xxf=signal.csd(spectrum0_f,spectrum0_f,nfft=1500)
+	f_yyf,csd_yyf=signal.csd(spectrum1_f,spectrum1_f,nfft=1500)
+	coh_freq=csd_f/np.sqrt(csd_xxf*csd_yyf)
+	phase_freq=np.angle(coh_freq)
+	phase_freq_int=[]
+	coh_freq_int=[]
+	i=0
+	for step in phase_freq:
+		interpolate=np.arange(0,len(spectrum0))
+		original=np.linspace(0,len(spectrum0),len(phase_freq[0]))	
+		new=np.interp(interpolate,original,phase_freq[i])
+		phase_freq_int.append(new)
+		coh_freq_int.append(np.interp(interpolate,original,coh_freq[i]))
+		i+=1
+
+	phase_freq_int=np.transpose(phase_freq_int)
+	coh_freq_int=np.transpose(coh_freq_int)
+	
+	phase = (phase_freq_int+phase_time_int)/2
+	coherence = (coh_freq_int+coh_time_int)/2
+	phase = np.angle(coherence)
+	return coherence, phase, coh_time,output
+	
+
+#--------------------------------------------------------------------------------------------------------------------------
+
+# data settings:
+pulse = 86775      # pulse number
+np.savetxt('Pulse_number.txt',[pulse,0])
+t0, t1 = 6, 12 # time limits [s]
+f0, f1 = 00, 500    # frequency limits [kHz]
+
+# FFT settings:
+pad = 1    # no. of points the data segment is padded to when FFTing
+
+# plot settings:
+LOG = True       # log or linear plot. linear only works well for zooms
+contrast = 10   # vmin = vmax/contrast for linear plot
+MAX = None       # set vmax. Leave as None to use data maximum
+
+#-------------------------------------------------------------------------------------------------------------------
+f0*= 1e3
+f1*= 1e3
+
+coils = ['H302','H303','H305','T001','T002','T008']
+phi_t = [92.9,103.1,110.4,3.0,42.1,257.1]
+phi_rad = np.radians(phi_t)
+
+spectrum_array=[]
+times, freqs = [], []
+
+#These are to find common range in which ALL probes record data
+t_hold=[0,0]
+probe_tstarts=[]
+probe_tstops=[]
+i=0
+
+for coil in coils:
+	print('DA/C1M-'+coil)
+	data, time, nw, title, units, ier=getdat('DA/C1M-'+coil, pulse) #reads in magnetic data
+
+	time_norm = time[0]
+	time -= time_norm           # zero the time
+	df = len(time)/time[-1]     # sampling frequency 
+	print('Sampling frequency:',df)
+
+	#makes all spectograms the same shape
+	if df==1000000:
+		nfft = 4096 #4096 number of data points used in each block for the FFT.
+		noverlap = 2048 # 2048 overlap between windows
+	else:
+		nfft = 8192 #4096 number of data points used in each block for the FFT.
+		noverlap = 4096 # 2048 overlap between windows
+
+	if noverlap >= nfft:
+	    noverlap = nfft/2.0
+	Window = get_window('hanning', nfft)  #hanning window for FFT, nfft is the number of samples in the window
+	cMap   = plt.get_cmap('inferno') #inferno
+	
+	#short time fourier transform 
+	#f,t,sfft=signal.stft(data,nperseg=nfft,fs=df,nfft=nfft)
+	#kernal=1/(100)*(np.ones((10,10)))
+	#convolved=signal.convolve2d(sfft,kernal,mode='same')
+
+	# create 2 subplots
+	#fig, ax = plt.subplots(nrows=2, ncols=1)
+	#ax[0].imshow(np.log10(np.absolute(sfft)))
+	#ax[1].imshow(np.log10(np.absolute(convolved)))
+	 
+	# plot 2 subplots
+	#ax[0].set_title('Before Convolution Smoothing')
+	#ax[1].set_title('After Convolution Smoothing')
+	#fig.suptitle('Spectogram')
+	#plt.show()
+
+	#takes spectograph (FFT)	    
+	#spectrum, f, t,im=plt.specgram(data, Fs=df, NFFT=nfft, window=Window, mode='magnitude', cmap=cMap, noverlap=noverlap, detrend='mean', scale='linear', pad_to=pad*nfft ) 
+	
+	#short time fourier transform 
+	f,t,spectrum=signal.stft(data,nperseg=nfft,fs=df,nfft=nfft)
+
+	t = t+time_norm - 40.0  # magnetic data doesn't always start at 40.0??
+
+	# only plot the window of interest:
+	i0, i1 = np.argmin(abs(t-t0)), np.argmin(abs(t-t1)) # time limit indices #argmin returns index of minimum
+	j0, j1 = np.argmin(abs(f-f0)), np.argmin(abs(f-f1)) # frequency limit indices
+	ts, fs, spectrum = t[i0:i1], f[j0:j1]/1e3, spectrum[j0:j1, i0:i1]/10.0 #new time, freq and spectrum in range 
+
+	if len(spectrum[0])==2930:
+		spectrum = np.delete(spectrum, 2929, 1)  #deletes end column
+
+	print(spectrum.shape)
+	spectrum_array.append(spectrum)
+	times.append(ts)
+	freqs.append(fs)
+
+#spectrum_array=np.array(spectrum_array)
+times=np.array(times)
+freqs=np.array(freqs)
+
+signal_no = np.arange(0,len(spectrum_array))
+pairs = np.array(list(combinations(signal_no,2)))  #All pair combinations for the 6 probes (0,1,2,3,4,5)
+print('pairs',pairs)
+
+test=[]
+residual_sum=np.zeros([21,2048,2929])
+relative_coil_pos = []
+all_phase = []
+for pair in pairs:
+	#coherence = phase_coherence(spectrum_array[pair[0]],spectrum_array[pair[1]])[0]
+	#cohere_time = phase_coherence(spectrum_array[pair[0]],spectrum_array[pair[1]])[3]
+	
+	kernal=1/(100)*(np.ones((10,10)))
+	csd_xy = signal.convolve2d((spectrum_array[pair[0]]*np.conj(spectrum_array[pair[1]])),kernal,mode='same')
+	#csd_xx = signal.convolve2d((spectrum_array[pair[0]]*np.conj(spectrum_array[pair[0]])),kernal,mode='same')
+	#csd_yy = signal.convolve2d((spectrum_array[pair[1]]*np.conj(spectrum_array[pair[1]])),kernal,mode='same')	
+	#coherence = csd_xy/np.sqrt(csd_xx*csd_yy)
+	
+	phase=np.angle(csd_xy)
+	#phase=np.angle(coherence)
+	all_phase.append(phase)
+	rel_angle = abs(phi_rad[pair[0]]-phi_rad[pair[1]])
+	relative_coil_pos.append(rel_angle) #array of relative coil positions
+	test.append([rel_angle,phase[517][2375]])
+
+	#create 2 subplots
+	#fig, ax = plt.subplots(nrows=2, ncols=1)
+	#ax[0].imshow(phase)
+	#ax[1].imshow(np.absolute(coherence))
+	#ax[0].set_title('Phase')
+	#ax[1].set_title('Coherence')
+	#plt.show()
+
+test=np.array(np.transpose(test))
+print(test)
+plt.scatter(test[0],test[1])
+plt.xlim(0,5)
+plt.ylim(-7,7)
+plt.show()
+
+mode_number_spec = np.zeros([2048,2929]) #array of zeros for mode number spectogram
+modes=np.arange(-10,11) #list of mode number from -10 to 10
+i=517
+#for a in all_phase[0]: #steps through all phase freq (2048)
+for a in range(517,917):
+	print(i)
+	j=2350
+	#for b in all_phase[0][0]: #steps through all phase time (2929)
+	for b in range(2350,2750):
+		phases = []
+		k=0
+		for pair in all_phase: #steps through each probe pair 
+			phases.append(all_phase[k][i][j]) #puts the [i][j]'th phase of each pair into an array to check residuals 
+			k+=1
+		residual_array = []
+		for mode in modes:
+			residual_mode_array =[]
+			max_shift = int(math.ceil((abs(mode)*np.max(relative_coil_pos))/(2*np.pi))) #optimum number of shifts for residual lines
+			if mode<0:
+				for shift in range (0,max_shift+1):
+					min_coil_pos = np.pi/abs(mode)*(2*shift-1)
+					max_coil_pos = np.pi/abs(mode)*(2*shift-1)+(2*np.pi/abs(mode))	
+					relevent_coil_pos=[]
+					relevent_phases=[]
+					nrelevent_coil_pos=[]
+					nrelevent_phases=[]
+					p=0
+					for phase in phases:
+						if relative_coil_pos[p]>=min_coil_pos and relative_coil_pos[p]<max_coil_pos:
+							relevent_coil_pos.append(relative_coil_pos[p])
+							relevent_phases.append(phases[p])
+						else:
+							nrelevent_coil_pos.append(relative_coil_pos[p])
+							nrelevent_phases.append(phases[p])
+						p+=1
+					if len(relevent_phases)>0:
+						residual = sum((np.array(relevent_phases)-(np.array(relevent_coil_pos)*mode+2*np.pi*shift))**2)
+						residual_mode_array.append(residual)
+
+					#plt.plot(np.array(relative_coil_pos),(np.array(relative_coil_pos)*mode)+2*np.pi*shift,label=(mode,shift))
+					#plt.scatter(relevent_coil_pos,relevent_phases,c='red')
+					#plt.scatter(nrelevent_coil_pos,nrelevent_phases,c='blue')
+					#plt.xlim(0,2*np.pi)
+					#plt.ylim(-np.pi,np.pi)
+					#plt.legend()
+					#plt.show()
+			if mode==0:			
+				residual = sum((np.array(phases)-(np.array(relative_coil_pos)*mode)+2*np.pi*shift)**2)
+				residual_mode_array.append(residual)
+
+			if mode>0:
+				for shift in range(0,-(max_shift+1),-1):
+					min_coil_pos = np.pi/mode*(2*abs(shift)-1)
+					max_coil_pos = np.pi/mode*(2*abs(shift)-1)+(2*np.pi/mode)	
+					relevent_coil_pos=[]
+					relevent_phases=[]
+					nrelevent_coil_pos=[]
+					nrelevent_phases=[]
+					p=0
+					for phase in phases:
+						if relative_coil_pos[p]>=min_coil_pos and relative_coil_pos[p]<max_coil_pos:
+							relevent_coil_pos.append(relative_coil_pos[p])
+							relevent_phases.append(phases[p])
+						else:
+							nrelevent_coil_pos.append(relative_coil_pos[p])
+							nrelevent_phases.append(phases[p])
+						p+=1
+					if len(relevent_phases)>0:
+						residual = sum((np.array(relevent_phases)-(np.array(relevent_coil_pos)*mode+2*np.pi*shift))**2)
+						residual_mode_array.append(residual)
+
+					#plt.plot(np.array(relative_coil_pos),(np.array(relative_coil_pos)*mode)+2*np.pi*shift,label=(mode,shift))
+					#plt.scatter(relevent_coil_pos,relevent_phases,c='red')
+					#plt.scatter(nrelevent_coil_pos,nrelevent_phases,c='blue')
+					#plt.xlim(0,2*np.pi)
+					#plt.ylim(-np.pi,np.pi)
+					#plt.legend()
+					#plt.show()
+			residual_array.append([sum(residual_mode_array),mode])
+		residual_array=np.array(residual_array)
+		#print(np.min(residual_array[:,0]))
+		if np.min(residual_array[:,0])<20:
+			mode_number = np.min(residual_array[np.argmin(residual_array[:,0])][1])
+			#print(mode_number)
+			mode_number_spec[i][j]=mode_number
+		j+=1
+	i+=1
+
+plt.imshow(mode_number_spec,cmap='gist_ncar')
+plt.show()
+
