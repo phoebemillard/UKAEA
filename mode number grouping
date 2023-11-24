@@ -1,0 +1,169 @@
+import timeit
+start = timeit.default_timer()
+from getdat import *
+import matplotlib.pyplot as plt
+from scipy.signal import get_window, spectrogram
+from scipy.fftpack import fft, fftfreq
+import numpy as np
+from ppf import ppfget
+from scipy import interpolate
+import math
+from scipy import interpolate
+from copy import deepcopy
+from itertools import combinations
+from scipy.sparse import csr_matrix
+from scipy import signal
+import matplotlib.gridspec as gridspec
+from matplotlib import colors
+
+#-------------------------------------------------------------------------------------------------------
+mode_image = np.loadtxt('mode_number_image.dat') #imports mode number data
+
+#test=np.array([[5,8,2,7,4,9],[5,8,2,7,4,9],[5,8,2,7,4,9],[5,8,2,7,4,9],[5,8,2,7,4,9],[5,8,2,7,4,9]])
+#print(test)
+#print(test[2:5][:,2:5])
+#print(mode_image)
+#print(mode_image[3:8][:,3:8])
+
+cmap = colors.ListedColormap(['white','steelblue','sienna','lightgreen','magenta','navy','red','gold','greenyellow','lightcoral','cyan','blueviolet','darkcyan','green','lightpink','darkorange','lime','violet','blue','deeppink','lightskyblue','yellow'])
+bounds = [-11.5,-10.5,-9.5,-8.5,-7.5,-6.5,-5.5,-4.5,-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5,10.5]
+norm = colors.BoundaryNorm(bounds, cmap.N)
+plt.imshow(mode_image,cmap=cmap, norm=norm)
+plt.colorbar(ticks=[-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10])
+#plt.imshow(mode_image,interpolation='nearest', extent=[6,12,0,500], aspect='auto', origin='lower') #plots mode number image
+plt.gca().invert_yaxis()
+plt.show()
+
+
+output = ([[0,0,0,0],[0,0,0,0]])
+
+array=np.zeros(mode_image.shape)
+print(array.shape)
+		
+m=1 #index for mode counter
+for i in range(5,mode_image.shape[0]-6): #counts over all pixels of mode number image
+	print(i)
+	for j in range(5,mode_image.shape[1]-6):
+		if mode_image[i][j]!=-11: #only considers the modes in the image 
+			kernal = mode_image[i-5:i+6][:,j-5:j+6]
+			array_kernal = array[i-5:i+6][:,j-5:j+6]
+			#print(kernal)
+			#print(array_kernal)
+			for a in range(0,11):
+				for b in range(0,11):
+					#print(a,b)
+					#print(kernal[a][b])
+					if array_kernal[a][b]!=0 and kernal[a][b]==kernal[5][5]:
+						#print('yes')
+						number=array_kernal[a][b]
+						for c in range(0,11):
+							for d in range(0,11):
+								if kernal[c][d]==kernal[5][5]:
+									array_kernal[c][d]=number
+						#b=11 #ends loop
+						#a=11
+						#print(a,b,'lolll')
+
+					else:
+						#print('no')
+						if a==10 and b==10:
+							for c in range(0,11):
+								for d in range(0,11):
+									if kernal[c][d]==kernal[5][5]:
+										array_kernal[c][d]=m
+							m+=1
+			#print(array_kernal)
+			array[i-5:i+6][:,j-5:j+6]=array_kernal
+						
+					
+
+
+
+
+
+
+
+m=0 #index for mode counter
+for i in range(0,mode_image.shape[0]): #counts over all pixels of mode number image
+	print(i)
+	for j in range(0,mode_image.shape[1]):
+		n=0
+		if mode_image[i][j]!=-11: #only considers the modes in the image 
+			while n <len(output):
+				if mode_image[i][j]==output[n][1] and abs(i-output[n][2]) in range(0,21) and abs(j-output[n][3]) in range(0,21):
+					#print(abs(i-output[n][2]),abs(j-output[n][3]))
+					output.append([output[n][0],mode_image[i][j],i,j])
+					n=len(output)+100
+				
+				else:
+					if n==len(output)-1:
+						output.append([m,mode_image[i][j],i,j])
+						m+=1 #creates new mode group
+						n+=1
+					else:
+						n+=1
+
+output=np.array(output)
+output_sort = output[output[:, 0].argsort()]
+print(output_sort)
+np.savetxt('grouped_mode.dat',output_sort)
+
+for row in output:
+	if row[1]==5:
+		plt.scatter(row[2],row[3],c='red')
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		
