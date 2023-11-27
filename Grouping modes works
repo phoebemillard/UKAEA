@@ -1,0 +1,143 @@
+import timeit
+start = timeit.default_timer()
+from getdat import *
+import matplotlib.pyplot as plt
+from scipy.signal import get_window, spectrogram
+from scipy.fftpack import fft, fftfreq
+import numpy as np
+from ppf import ppfget
+from scipy import interpolate
+import math
+from scipy import interpolate
+from copy import deepcopy
+from itertools import combinations
+from scipy.sparse import csr_matrix
+from scipy import signal
+import matplotlib.gridspec as gridspec
+from matplotlib import colors
+
+#-------------------------------------------------------------------------------------------------------
+mode_image = np.loadtxt('mode_number_image.dat') #imports mode number data
+print(mode_image[64,30])
+
+#replots the mode image
+cmap = colors.ListedColormap(['white','steelblue','sienna','lightgreen','magenta','navy','red','gold','greenyellow','lightcoral','cyan','blueviolet','darkcyan','green','lightpink','darkorange','lime','violet','blue','deeppink','lightskyblue','yellow'])
+bounds = [-11.5,-10.5,-9.5,-8.5,-7.5,-6.5,-5.5,-4.5,-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5,10.5]
+norm = colors.BoundaryNorm(bounds, cmap.N)
+plt.imshow(mode_image,cmap=cmap, norm=norm)
+plt.colorbar(ticks=[-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10])
+plt.gca().invert_yaxis()
+plt.show()
+
+tracker = np.zeros(mode_image.shape) #creates array of zeros that will be used to track what mode elements have been couted for
+mode_list = [[0,0,0,0]] #initialises an output array which will have [counting index, mode number, i, j]
+
+counter=1
+for i in range(400,len(mode_image)-8): #steps through the frequency axis of the mode image
+	print(i)
+	for j in range(0,len(mode_image[0])-8): #steps through the time axis of the mode image 
+		if mode_image[i][j]!=-11 and tracker[i][j]==0: #only considers the modes that havent been couted yet
+			mode_number = mode_image[i][j]
+			centres_list = [[0,0],[i,j]]
+			block_array = np.zeros(mode_image.shape) #creates empty array to track what 13x13 blocks have been looked at
+			block_array[i][j]=1 #sets the centre pf the initial block to 1
+			while len(centres_list)>1:
+				k=1
+				new_centres=[[0,0]]
+				for row in range(k,len(centres_list)):
+					p=0 #tells if there have been any of the mode in the block, it will remain 0 if there were not any in it
+					for a in range(centres_list[row][0]-6,centres_list[row][0]+7,1):
+						for b in range(centres_list[row][1]-6,centres_list[row][1]+7,1):
+							if mode_image[a][b]==mode_number:
+								p+=1
+								mode_list.append([counter,mode_number,a,b])
+								tracker[a][b]=1
+					if p>0:		
+						if block_array[centres_list[row][0]+13,centres_list[row][1]]==0: #checks if block above has been looked at 
+							new_centres.append([centres_list[row][0]+13,centres_list[row][1]])
+							block_array[centres_list[row][0]+13,centres_list[row][1]] = 1 
+						if block_array[centres_list[row][0]-13,centres_list[row][1]]==0: #checks if block below has been looked at 
+							new_centres.append([centres_list[row][0]-13,centres_list[row][1]])
+							block_array[centres_list[row][0]-13,centres_list[row][1]] = 1 
+						if block_array[centres_list[row][0],centres_list[row][1]-13]==0: #checks if block left has been looked at 
+							new_centres.append([centres_list[row][0],centres_list[row][1]-13])
+							block_array[centres_list[row][0],centres_list[row][1]-13] = 1 
+						if block_array[centres_list[row][0],centres_list[row][1]+13]==0: #checks if block right has been looked at 
+							new_centres.append([centres_list[row][0],centres_list[row][1]+13])
+							block_array[centres_list[row][0],centres_list[row][1]+13] = 1 
+				centres_list=new_centres
+			counter+=1
+
+mode_list=np.array(mode_list)
+np.savetxt('grouped_modes.dat',mode_list)	
+
+for row in mode_list:
+	if row[0]==1:
+		plt.scatter(row[3],row[2],c='red',marker='x')
+	#if row[0]==2:
+	#	plt.scatter(row[3],row[2],c='blue',marker='*')
+	#if row[0]==3:
+	#	plt.scatter(row[3],row[2],c='green',marker='+')
+	#if row[0]==4:
+	#	plt.scatter(row[3],row[2],c='orange',marker='x')
+	#if row[0]==5:
+	#	plt.scatter(row[3],row[2],c='black',marker='^')
+	#if row[0]==6:
+	#	plt.scatter(row[3],row[2],c='purple',marker='x')
+plt.show()
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		
