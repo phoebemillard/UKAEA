@@ -1,0 +1,484 @@
+import timeit
+start = timeit.default_timer() #starts timer
+from getdat import *
+import matplotlib.pyplot as plt
+from scipy.signal import get_window, spectrogram
+from scipy.fftpack import fft, fftfreq
+import numpy as np
+from ppf import ppfget
+from scipy import interpolate
+import math
+from scipy import interpolate
+from itertools import combinations
+from scipy import signal
+from matplotlib import colors
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy.signal import find_peaks
+from ppf import *
+
+#--------------functions-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#takes a toroidal mode number matrix and groups together the elements corresponding ot each individual mode
+#outputs an array containing the troidal mode number and positions of all the elements corresponding to each mode along with a counter which identifies each individual mode
+def mode_grouping(mode_matrix,pad,pad_length,pad_value,non_mode_number,square_length): #see report to help understand how this mode grouping works
+	shape=mode_matrix.shape
+	tracker = np.zeros(shape) #creates array of zeros that will be used to track what mode elements have been couted for, will be changed to 1 if matrix element has been identified as a mode and outputted
+	mode_list = [[0,0,0,0,0]] #initialises an output array which will have [counting index, mode number, i, j] (i and j are the matrix coordinates)
+	
+	#adds a border pad length thick around the edge of the toroidal mode number matrix so that the squares that spead across the mode can go right to the edges of the toroidal mode number matrix
+	if pad == 'yes':	
+		mode_image = np.pad(mode_matrix, pad_width=pad_length, mode='constant', constant_values=pad_value)
+
+	counter=1 #counter mode modes found
+	for i in range(pad_length,pad_length+shape[0]): #steps through the frequency axis of the mode image, not inculding the padding (this is why there is +pad to each index)
+		for j in range(pad_length,pad_length+shape[1]): #steps through the time axis of the mode image 
+			#identifying the stat of a new mode
+			if mode_matrix[i][j]!=non_mode_number and tracker[i-pad_length][j-pad_length]==0: #only considers matrix elements that havent been couted yet (elements that havent been counted will be 0 in tracker) 
+				mode_number = mode_matrix[i][j] #toroidal mode number of the mode of interest
+				if mode_number ==0: #since 9=(n+1)/n, this doesnt work for n=0 so q is set to 0
+					q=0
+				else:
+					q=(mode_number+1)/mode_number #q for non zero toroidal mode number 
+				centres_list = [[0,0],[i-pad_length,j-pad_length]] #list of the matrix coordinates of the square_length x square_length centres, (the [0,0] is a fake one added to make the array 2D to append)
+				block_array = np.zeros(mode_image.shape) #creates empty array to track what square_length x square_length blocks have been looked at
+				block_array[i-pad_length][j-pad_length]=1 #sets the centre of the initial quare_length x square_length to 1
+				while len(centres_list)>1: #while there are still new squares to inspect 
+					new_centres=[[0,0]] #initialises array for the new square centres to be inspected in the next iteration. [0,0] is a fake centre allowing the array to be appended 
+					for row in range(1,len(centres_list)): #steps through the centre coordinates, ignoring the first fake [0,0] coordinate 
+						p=0 #tells if there have been any elements belongning to the mode of interest in the square, it will remain 0 if there were not any in it
+						#steps through all the matrix elements in the square_length x square_length block
+						for a in range(centres_list[row][0]-math.ceil((square_length-1)/2),centres_list[row][0]+(math.ceil((square_length-1)/2)+1)):
+							for b in range(centres_list[row][1]-math.ceil((square_length-1)/2),centres_list[row][1]+(math.ceil((square_length-1)/2)+1)):
+								if mode_matrix[a+pad_length][b+pad_length]==mode_number: #checks if the element has the right toroidal mode number 						
+									p+=1 #tells that an element belonging to the mode of interest has been found meaning its surrounding squares will be inspected
+									mode_list.append([counter,mode_number,a,b,q]) #outputs the element to an array
+									tracker[a][b]=1 #reports the toroidal mode number matrix element as counted for 
+						if p>0:	
+							#determines the centre coorinates of the new squares to be inspected in the next iteration	
+							#checks if block above has been looked at
+							if block_array[centres_list[row][0]+square_length,centres_list[row][1]]==0:  
+								if block_array[centres_list[row][0]+square_length,centres_list[row][1]] == 0: #makes sure the square isnt inspected twice
+									new_centres.append([centres_list[row][0]+square_length,centres_list[row][1]]) #adds new block centre to array 
+									block_array[centres_list[row][0]+square_length,centres_list[row][1]] = 1 
+							#checks if block below has been looked at
+							if block_array[centres_list[row][0]-square_length,centres_list[row][1]]==0: 
+								if block_array[centres_list[row][0]-square_length,centres_list[row][1]] == 0:  
+									new_centres.append([centres_list[row][0]-square_length,centres_list[row][1]])
+									block_array[centres_list[row][0]-square_length,centres_list[row][1]] = 1 
+							#checks if block to the left has been looked at 
+							if block_array[centres_list[row][0],centres_list[row][1]-square_length]==0: 
+								if block_array[centres_list[row][0],centres_list[row][1]-square_length] == 0: 
+									new_centres.append([centres_list[row][0],centres_list[row][1]-square_length])
+									block_array[centres_list[row][0],centres_list[row][1]-square_length] = 1 
+							#checks if block to the right has been looked at
+							if block_array[centres_list[row][0],centres_list[row][1]+square_length]==0:  
+								if block_array[centres_list[row][0],centres_list[row][1]+square_length] == 0:
+									new_centres.append([centres_list[row][0],centres_list[row][1]+square_length])
+									block_array[centres_list[row][0],centres_list[row][1]+square_length] = 1 		
+							#checks if block above and to the rigth has been looked at 
+							if block_array[centres_list[row][0]+square_length,centres_list[row][1]+square_length]==0:
+								if block_array[centres_list[row][0]+square_length,centres_list[row][1]+square_length] == 0: 
+									new_centres.append([centres_list[row][0]+square_length,centres_list[row][1]+square_length])
+									block_array[centres_list[row][0]+square_length,centres_list[row][1]+square_length] = 1 
+							#checks if block below and to the right has been looked at 
+							if block_array[centres_list[row][0]-square_length,centres_list[row][1]+square_length]==0:
+								if block_array[centres_list[row][0]-square_length,centres_list[row][1]+square_length] = 0:  
+									new_centres.append([centres_list[row][0]-square_length,centres_list[row][1]+square_length])
+									block_array[centres_list[row][0]-square_length,centres_list[row][1]+square_length] = 1 
+							#checks if block above and to the left has been looked at 
+							if block_array[centres_list[row][0]+square_length,centres_list[row][1]-square_length]==0:
+								if block_array[centres_list[row][0]+square_length,centres_list[row][1]-square_length] == 0:
+									new_centres.append([centres_list[row][0]+square_length,centres_list[row][1]-square_length])
+									block_array[centres_list[row][0]+square_length,centres_list[row][1]-square_length] = 1 
+							#checks if block below and to the left has been looked at 
+							if block_array[centres_list[row][0]-square_length,centres_list[row][1]-square_length]==0: 
+								if block_array[centres_list[row][0]-square_length,centres_list[row][1]-square_length] == 0:
+									new_centres.append([centres_list[row][0]-square_length,centres_list[row][1]-square_length])
+									block_array[centres_list[row][0]-square_length,centres_list[row][1]-square_length] = 1 
+								
+					centres_list=new_centres #makes the list of new centres the current list to inspect fo the next iteration
+				counter+=1
+
+	mode_list=np.array(mode_list)
+	mode_list=np.delete(mode_list,0,axis=0) #gets rid of the [0,0,0,0] used to initialise the array
+	return mode_list
+
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#--------------data settings-----------------------------------------------------------------------------------------------------------------------
+
+#imports test file of 251 JET pulse numbers (JPN):
+#file also contains interesting times at which stable AE have been identified by the antenna signal 
+good_pulses_times = np.loadtxt('good_times.dat',usecols=(0,1)) #column 0: JPN, column 1:Stable AE time
+good_pulses = np.unique(good_pulses_times[:,0]) #finds all of the pulse numbers 
+
+#creates array of the pulse numbers with the max min times in which stable AE were detected 
+pulse_times = []
+for pulse in good_pulses:
+	min_time = min(good_pulses_times[good_pulses_times[:,0]==pulse][:,1])-40 
+	max_time = max(good_pulses_times[good_pulses_times[:,0]==pulse][:,1])-40
+	pulse_times.append([pulse,min_time,max_time])
+
+pulse_times=np.array(pulse_times)
+
+f0, f1 = 0, 500 #frequency limits [kHz]
+#converts into kHz 
+f0*= 1e3
+f1*= 1e3
+
+#list of magnetic pick-up coils and their toroidal angles 
+coils = ['H302','H303','H305','T001','T002','T008']
+phi_t = [92.9,103.1,110.4,3.0,42.1,257.1]
+phi_rad = np.radians(phi_t)
+
+#-------------other pulse number subsections---------------------------------------------------------------------------------------------------------
+#JPN where EFIT and EFTM are available 
+#pulse_times = [94627.0, 95272.0, 95672.0, 95675.0, 95958.0, 96851.0, 96852.0, 97771.0, 97773.0, 97813.0, 97892.0, 97896.0, 97899.0, 97900.0, 97976.0, 97977.0, 98885.0, 99164.0, 99205.0, 99596.0, 99777.0, 99884.0, 99886.0, 99908.0, 99946.0, 99948.0, 99960.0, 99962.0, 99964.0, 99969.0, 99970.0, 99972.0]
+
+#JPN where EFIT, EFTM, EFTF and EFTP are all availabe
+#pulse_times=[95272.0, 95675.0, 97892.0, 97896.0, 97899.0, 97900.0, 97976.0, 97977.0, 99596.0, 99777.0, 99884.0, 99886.0, 99908.0, 99948.0, 99960.0, 99962.0, 99964.0, 99969.0, 99970.0, 99972.0]
+
+#-------------programme starts-----------------------------------------------------------------------------------------------------------------------
+
+all_counter=1 #starts counter for unstable modes detected
+database = [] #initiates the database of unstable modes detected and analysed by the programme
+for row in pulse_times:
+	all_mode_list=[] #initiates the databse for unstable modes within each pulse
+	spectrum_array=[] #initiates array for the 6 spectograms produced from each coils data
+
+	for coil in coils:
+		data, time, nw, title, units, ier=getdat('DA/C1M-'+coil, pulse) #reads in magnetic data
+		data_ant, time_ant, nw_ant, title_ant, units_ant, ier_ant = getdat('SC/FANT', pulse) #reads in antenna data
+		
+		#zeroing the time data
+		time_norm = time[0]
+		time -= time_norm           
+		df = len(time)/time[-1] #sampling frequency of magnetic data by coil
+
+		#determines the window length of the short-time Fourier transforms (STFT) depending whether the sampling rate is 1e6 s^-1 or 2e6 s^-1
+		if df==1e6:
+			nfft = 6250 #number of data points used in each block for the STFT.
+			noverlap = 3125 #50% overlap between Fourier transform windows
+		else:
+			nfft = 12500 #number of data points used in each block for the STFT.
+			noverlap = 6250 #50% overlap between Fourier transform windows
+
+		#incase the window overlap is set to larger than the window length
+		#its set back to being 50% of the window length
+		if noverlap >= nfft:
+		    noverlap = nfft/2.0
+		
+		Window = get_window('hanning', nfft)  #hanning window for SFFT
+		cMap   = plt.get_cmap('inferno') #colour map for spectograms 
+		
+		#short time fourier transform (STFT)
+		#creates spectogram using each coils magnetic data
+		f,t,spectrum=signal.stft(data,nperseg=nfft,fs=df,nfft=nfft,window=Window,boundary='zeros')
+
+		t = t+time_norm - 40.0 #time data is un-zeroed and 40s is subtrated as magnetic data usually starts at 40s
+		time_ant = time_ant-40 #40s subtracted from antenna time 
+
+		if coil == 'H302': #for the first coil 
+			#if NBI or ICRH heating is not on during the time magnetic data is measured
+			#t0 and t1 are set to the max and min times that the coil collects data
+			t0,t1=t[0],t[-1] 
+			
+			#determines t0 and t1 if NBI or ICRH is turned on at some point during the times the coil collects data
+			#t0 and t1 set to the maximum and minimum time that these heating methods are present
+			header, w, nbi_power, x, time_nbi, ier = ppfget(pulse, "NBI", "PTOT") #imports NBI power data
+			header, w, icrh_power, x, time_icrh, ier = ppfget(pulse, "ICRH", "PTOT") #imports ICRH power data
+			if len(time_nbi[nbi_power>0])>0 and len(time_icrh[icrh_power>0])>0: #if NBI and ICRH are present at some point
+				t0 = np.min([np.min(time_nbi[nbi_power>0]),np.min(time_icrh[icrh_power>0])])-40
+				t1 = np.min([np.max(time_nbi[nbi_power>0]),np.max(time_icrh[icrh_power>0])])-40
+			if len(time_nbi[nbi_power>0])==0 and len(time_icrh[icrh_power>0])>0: #if only ICRH is present at some point
+				t0 = np.min(time_icrh[icrh_power>0])-40
+				t1 = np.max(time_icrh[icrh_power>0])-40
+			if len(time_nbi[nbi_power>0])>0 and len(time_icrh[icrh_power>0])==0: #if only NBI is present at some point
+				t0 = np.min(time_nbi[nbi_power>0])-40
+				t1 = np.max(time_nbi[nbi_power>0])-40
+			
+			#-----------------determines ICRH heating times and frequencies-------------------------------------------------------------
+			#reads in ICRH data from antennas A-E
+			header_fra, datw_fra, data_fra ,x_fra, time_fra, ier_fra = ppfget(pulse, "ICRH", "FRA") 
+			header_frb, datw_frb, data_frb ,x_frb, time_frb, ier_frb = ppfget(pulse, "ICRH", "FRB")
+			header_frc, datw_frc, data_frc ,x_frc, time_frc, ier_frc = ppfget(pulse, "ICRH", "FRC")
+			header_frd, datw_frd, data_frd ,x_frd, time_frd, ier_frd = ppfget(pulse, "ICRH", "FRD")
+			header_fre, datw_fre, data_fre ,x_fre, time_fre, ier_fre = ppfget(pulse, "ICRH", "FRE")
+			time_ptot-=40 
+
+			#adds non zero ICRH antenna arrays to a bigger array
+			all_antenna = [] 
+			if len(data_fra)>0:
+				all_antenna.append(np.unique(data_fra))
+			if len(data_frb)>0:
+				all_antenna.append(np.unique(data_frb))
+			if len(data_frc)>0:
+				all_antenna.append(np.unique(data_frc))
+			if len(data_frd)>0:
+				all_antenna.append(np.unique(data_frd))
+			if len(data_fre)>0:
+				all_antenna.append(np.unique(data_fre))
+			all_antenna = np.array(all_antenna)
+
+			antenna_no = np.arange(0,len(all_antenna)) #list of antenna indexes
+			antenna_pairs = np.array(list(combinations(antenna_no,2)))  #all pair combinations for the 5 antennas
+			differences = [] #initialises array of frequency differences between antenna 
+			for pair in antenna_pairs:
+				differences.append(abs(all_antenna[pair[0]]-all_antenna[pair[1]])) #finds beat frequency difference
+			differences = np.array(np.unique(differences)[np.nonzero(np.unique(differences))]) #gives the unique beat ICRH frequencies
+			if len(icrh_time[icrh_power>0])>0: #only if ICRH is turned on in that pulse
+				icrh_min_time = np.min(icrh_time[icrh_power>0])
+				icrh_max_time = np.max(icrh_time[icrh_power>0])
+			#--------------------------------------------------------------------------------------------------------------------------
+
+		#cuts spectrograms to only contian energy densty values within the relevent times and frequency ranges [t0,t1] and [f0,f1]
+		i0, i1 = np.argmin(abs(t-t0)), np.argmin(abs(t-t1)) #spectrum indices of t0 and t1 
+		j0, j1 = np.argmin(abs(f-f0)), np.argmin(abs(f-f1)) #spectrum indices of f0 and f1 
+		ts, fs, spectrum = t[i0:i1], f[j0:j1]/1e3, spectrum[j0:j1, i0:i1]/10.0 #new time, freq and spectrum in range
+		data_ant, time_ant = data_ant[(time_ant>=t0)*(time_ant<=t1)], time_ant[(time_ant>=t0)*(time_ant<=t1)] #cuts antenna signal
+	
+		if len(data_ant)>0: #if there is an antenna signal present in the pulse
+			ant_freq_index, ant_time_index = (data_ant-f0)*len(spectrum)/(f1-f0), (time_ant-t0)*len(spectrum[0])/(t1-t0) #converts antenna signal into spectogram units
+			interp = interpolate.interp1d(ant_time_index, ant_freq_index) #interpolates to cover every antenna point in spectogram
+			ant_time_index = np.arange(math.ceil(ant_time_index[0]),math.floor(ant_time_index[-1]))
+			ant_freq_index = np.rint(interp(ant_time_index)) #rounds to integrs so can be used as index
+			antenna_signal = np.stack((ant_time_index,ant_freq_index),axis=1) #combines antenna signal into array [time,freq]
+
+		spectrum_array.append(spectrum) #appends spectograms from each coil into array 
+	
+	spectrum_array=np.array(spectrum_array)
+
+	#maximum energy density spectograms
+	#takes the maximum energy density of the 6 spectograms at each matrix position and combines into one spectogram
+	max_amp = np.maximum(np.absolute(spectrum_array[0]),np.absolute(spectrum_array[1]))
+	for i in range(2,len(spectrum_array)):
+		max_amp = np.maximum(max_amp,np.absolute(spectrum_array[i]))	
+	
+	#--------------------------plots maximum energy density spectogram----------------------
+	#print('saved')
+	#plt.imshow(np.log10(max_amp))
+	#plt.scatter(ant_time_index,ant_freq_index,c='red')
+	#plt.show()
+	#plt.imshow(np.log10(np.absolute(max_amp)))
+	#plt.colorbar()
+	#plt.show()
+	#peak_condition = np.zeros(max_amp.shape)#for time_slice in range(0,len(max_amp[0])):
+	#	peaks=find_peaks(np.log10(np.absolute(max_amp))[:,time_slice], distance=30,height=-3.8,prominence=0.95)[0]
+	#	peak_condition[:,time_slice][peaks]=1
+	#----------------------------------------------------------------------------------------
+	
+	#finds the value of the top 3% of energy densites in the maximum energy density spectogram
+	#the locations where matrix elements have equal or higher energy density values are where coherent magnetic oscillations are present 
+	ravel = np.ravel(np.log10(np.absolute(max_amp))) #makes max spectogram 1D, uses the log10(absolute) alue as the energy densities are complex 
+	ravel = sorted(ravel) #sorts into ascending order 
+	top_five = ravel[math.ceil(len(ravel)/33*32)] #finds the value of the top 3%
+		
+	#convolution smoothing and relative phase between coil pairs
+	signal_no = np.arange(0,len(spectrum_array)) #numbers the pick-up coils 0-5
+	pairs = np.array(list(combinations(signal_no,2)))  #All pair combinations for the 6 probes 
+	relative_coil_pos = [] #initiallises array for the reative toroidal angle between coils 
+	for pair in pairs:
+		#relative phase between two coils a and b, phi_(a,b) = arctan(Im(SaSb*)/Re(SaSb*)) where Sa and Sb are the convolution smoothed spectograms from coils a and b 
+		kernal=1/(11*11)*(np.ones((11,11))) #have to play around with size to find optimum, a square kernel with length of 11 matrix elemets was used 
+		csd_xy = signal.convolve2d((spectrum_array[pair[0]]*np.conj(spectrum_array[pair[1]])),kernal,mode='same')
+		phase=np.angle(csd_xy)
+		all_phase.append(phase)
+		rel_angle = abs(phi_rad[pair[0]]-phi_rad[pair[1]]) #finds the toroidal angles between the pair of coils
+		relative_coil_pos.append(rel_angle) #apends to array of relative coil positions
+
+	all_phase=np.array(all_phase)
+
+	#-----------------------------least squares fit to find toroidal mode numbers---------------------------------------------------------------------------------------------------------------------------
+	modes=np.arange(-7,8) #list of toroidal mode numbers in the range -7<=n<=7 
+
+	#in order to perform matrix operations, each of the relative angles between coils needed to be made into an array the same shape as the spectograms 
+	relative_coil_pos_matrix = [] 
+	for coil in relative_coil_pos:
+		relative_coil_pos_matrix.append(np.full(shape=all_phase[0].shape,fill_value=coil)) #matricies containing just one value at all positions
+	relative_coil_pos_matrix=np.array(relative_coil_pos_matrix)
+
+	#----------------------------------------------------------------finding minimum residuals and making toroidal mode number array--------------------------------------------------------------------------
+	#the maximum residual of a point would be (2*(max(rel_coil_pos))*max(mode))^2
+	#so i will set an initial residual matrix to two times this so that the first residual caluclated will always be smaller than this 
+	mode_image=np.zeros(all_phase[0].shape) #initialises the mode number image matrix
+	mode_arrays=[]
+	for mode in modes: #steps through each possible mode number from -7 to 7
+		previous_residual = np.full(shape=all_phase.shape,fill_value=(2*max(relative_coil_pos)*max(modes))**2)
+		if mode>0:
+			n = -1 #chanages the direction of the shift in phase. for positive mode numbers the residuals shift down
+		if mode<=0:
+			n = 1 #for negative mode numbers, the redsiduals shift upward
+		max_shift = int(math.ceil((abs(mode)*np.max(relative_coil_pos))/(2*np.pi))) #optimum number of shifts for residual lines
+		for shift in range (0,max_shift+1): #steps through each phase shift of 2 pi
+			residuals=(all_phase-(mode*relative_coil_pos_matrix+n*shift*2*np.pi))**2 #calculates the residual 
+			for i in range(0,len(all_phase)):
+				previous_residual[i]=np.minimum(previous_residual[i],residuals[i]) #as it loops through all the shifts it should leave us with the minimum resdiaul out of all the shifts 
+		array=np.zeros(previous_residual[0].shape)
+
+		for i in range(0,len(previous_residual)):
+			array=np.add(array,previous_residual[i])
+		mode_arrays.append(array)
+
+	mode_arrays=np.array(mode_arrays)
+	for i in range(0,len(all_phase[0])):
+		for j in range(0,len(all_phase[0][0])):
+			if np.log10(np.absolute(max_amp[i][j]))>top_five:
+				if i>=(70000-f0)*(all_phase.shape[1]/(f1-f0)):
+					mode_image[i][j]=-modes[np.argmin(mode_arrays[:,i,j])]
+				else:
+					mode_image[i][j]=abs(modes[np.argmin(mode_arrays[:,i,j])])
+			else:
+				mode_image[i][j]=-11
+	#-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+	#removing antenna and ICRH signals 
+	#removing antenna signal
+	if len(data_ant)>0: #if antenna signal was present during pulse
+		for row in antenna_signal:
+			mode_image[int(row[1])-4:int(row[1])+5][:,int(row[0])]=-8 #sets toroidal mode number matrix elements of antenna signal to value outisde of n range 
+	#removing ICRH signal 
+	#converts the times and frequencies of the ICRH signal into the scale of the toroidal mode number matrix
+	#removes the matrix elements between 5 matrix elements below and 5 matrix elements above the idex corresponding to the ICRH frequency
+	if len(differences)>0: #if ICRH was present during pulse 
+		for diff in differences:
+			mode_image[math.floor((diff-f0)*len(mode_image)/(f1-f0)-5):math.ceil((diff-f0)*len(mode_image)/(f1-f0)+5)][:,math.floor((icrh_min_time-t0)*len(mode_image[0])/(t1-t0)):math.ceil((icrh_max_time-t0)*len(mode_image[0])/(t1-t0))]=-8 #sets toroidal mode number matrix elements of ICRH signal to value outisde of n range 
+
+	#------------------grouping modes------------------------------------------------------------------------------------------------------------------------------
+	mode_list = mode_grouping(mode_matrix=mode_iamge,pad='yes',pad_length=50,pad_value=100,non_mode_number=-8,square_length=21)
+	
+	#----------------------------removing beating------------------------------------------------------------------------------------------------------------------
+	#for all non-zero modes of non-zero frequency, they are replicated at interger multiples of frequency and toroidal mode number
+	#if the matrix elements of the existng mode number image match the replicated ones, then those elements are considered part of beats and removed 
+	unique=np.unique(mode_list[:,0]) #counting index of all modes identifed in toroidal mode number image 
+	for mode in unique:	#steps through each mode identified in the toroidal mode number image
+		if mode_list[mode_list[:,0]==mode][0][1]!=0 and np.max(mode_list[mode_list[:,0]==mode][:,2])>0: #only removes beating for non n=0 modes with non-zero frequencies
+			max_shift=math.floor(shape[0]/np.max(mode_list[mode_list[:,0]==mode][:,2])) #finds maximum integer frequency shift to remain within [f0,f1]
+			if max_shift>7: #the biggest frequency shift would be for an n=1 mode which can be multiplied by 7 to get n=7
+				max_shift=7 
+			for shift in range(2,max_shift+1): #stepts thorugh frequency shift
+				for point in mode_list[mode_list[:,0]==mode]: #for each matrix element in the mode of interest 
+					ranges=np.arange(-shift-1,shift) #checks the points above and below the replicated mode too as when neighboring frequencies are multiplies gaps form
+					for i in ranges:
+						if mode_image[int(point[2]*shift+50+i)][int(point[3]+50)]==point[1]*shift: #if the replicted mode matches the mode number image
+							mode_image[int(point[2]*shift+50+i)][int(point[3]+50)]=-8 #sets beat matrix elements to value outside of n range 
+
+	#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	#------------------grouping modes----------------------------------------------------------------------------------------------------------------------------------------------------
+	mode_list = mode_grouping(mode_matrix=mode_iamge,pad='no',pad_length=50,pad_value=100,non_mode_number=-8,square_length=21)
+	
+	#-----------further noise removal and appending to an array---------------------------------------------------------------------------------------------------------------------------------------------
+	unique=np.unique(mode_list[:,1]) #gives the conter index of each individual mode identified in during the pulse 
+	for mode in unique: #for each of the individual modes 
+		x=0 #if x=0 it shows that no new mode has been appended to the array so the counter doesnt increase
+		#removes more noise by disgarding any modes with less than 8 data points or lasting less than 50 ms as these are not likely unstable modes  
+		if len(mode_list[mode_list[:,1]==mode])>8 and np.max(mode_list[mode_list[:,1]==mode][:,4]*((t1-t0)/shape[1])+t0)-np.min(mode_list[mode_list[:,1]==mode][:,4]*((t1-t0)/shape[1])+t0)>0.05:
+			for row in mode_list[mode_list[:,1]==mode]: #for each matrix element bellonging to that mode
+				if row[3]*((f1-f0)/shape[0])+f0<70000 and row[2]==0: #removes n=0 below 70khz as no NTM has n=0
+					pass #do nothing 
+				else:
+					#for AEs (between 70kHz ansd 500kHz)
+					#appends the mode counter, pulse number, toroidal mode number, frequency, time and q value to array. Reconstructed q values and radius set to -999 as not available
+					if row[3]*((f1-f0)/shape[0])+f0>=70000:
+						#appends to database that contains the modes in all pulses, and all_mode_list which contains the modes in just that pulse 
+						all_mode_list.append([all_counter,pulse,row[2],row[3]*((f1-f0)/shape[0])+f0,row[4]*((t1-t0)/shape[1])+t0,-999,row[5],-999,-999,-999,-999])
+						database.append([all_counter,pulse,row[2],row[3]*((f1-f0)/shape[0])+f0,row[4]*((t1-t0)/shape[1])+t0,-999,row[5],-999,-999,-999,-999])
+						x=1 #logs that a new mode has been added to the database so the counter will increase
+						
+
+					#for NTMs (between 0kHz ans 70kHz) finds the q value predicted by EFIT, EFTM, EFTF, EFTP (if available)
+					else:
+						ppfuid('cxsbatch', rw="R")
+						header, w, rotation, radius, time_f, ier = ppfgts(pulse, 'CXD6', 'ANGF', row[4]*((t1-t0)/shape[1])+t0+40) #imports plasma rotation frequency data at given time
+						if len(rotation)>0 and len(radius)>0: #if rotation data is available 
+							#interpolates to find the radius at which the local rotation frequency equals toroidal mode number*NTM frequency 
+							#plasma rotation frequency given in angular freqeuncy to divided by 2pi to get frequency
+							interp = interpolate.interp1d(rotation/(2*np.pi),radius,bounds_error=False, fill_value='extrapolate') 
+							rad=interp(row[3]/row[2])
+							if rad>=2.8 and rad<=3.9: #if the radius is within the torus size 
+
+								#imports EFIT q and radius data 
+								ppfuid('jetppf', rw="R")
+								header_efit_q, w_efit_q, q_efit_q, x_efit_q, time_efit_q, ier_efit_q = ppfgts(pulse, "EFIT", "Q",row[4]*((t1-t0)/shape[1])+t0+40)
+								header_efit_r, w_efit_r, R_efit_r, x_efit_r, time_efit_r, ier_efit_r = ppfgts(pulse, "EFIT", "RMJO", row[4]*((t1-t0)/shape[1])+t0+40)
+								#if EFIT data is available and the radius of the NTM is within the radius predicted by EFIT
+								if len(q_efit_q)>0 and len(R_efit_r)>0 and rad<=np.max(R_efit_r):
+									k = interpolate.interp1d(R_efit_r,q_efit_q,bounds_error=False, fill_value='extrapolate')
+									q_efit = k(rad)
+								else:
+									q_efit=-999
+
+								#imports EFTM q and radius data 
+								header_eftm_q, w_eftm_q, q_eftm_q, x_eftm_q, time_eftm_q, ier_eftm_q = ppfgts(pulse, "EFTM", "Q", row[4]*((t1-t0)/shape[1])+t0+40)
+								header_eftm_r, w_eftm_r, R_eftm_r, x_eftm_r, time_eftm_r, ier_eftm_r = ppfgts(pulse, "EFTM", "RMJO", row[4]*((t1-t0)/shape[1])+t0+40)
+								#if EFTM data is available and the radius of the NTM is within the radius predicted by EFTM
+								if len(q_eftm_q)>0 and len(R_eftm_r)>0 and rad<=np.max(R_eftm_r):
+									k = interpolate.interp1d(R_eftm_r,q_eftm_q,bounds_error=False, fill_value='extrapolate')
+									q_eftm = k(rad)
+								else:
+									q_eftm=-999
+
+								#imports EFTF q and radius data 
+								header_eftf_q, w_eftf_q, q_eftf_q, x_eftf_q, time_eftf_q, ier_eftf_q = ppfgts(pulse, "EFTF", "Q",row[4]*((t1-t0)/shape[1])+t0+40)
+								header_eftf_r, w_eftf_r, R_eftf_r, x_eftf_r, time_eftf_r, ier_eftf_r = ppfgts(pulse, "EFTF", "RMJO", row[4]*((t1-t0)/shape[1])+t0+40)
+								#if EFTF data is available and the radius of the NTM is within the radius predicted by EFTF
+								if len(q_eftf_q)>0 and len(R_eftf_r)>0 and rad<=np.max(R_eftf_r):
+									k = interpolate.interp1d(R_eftf_r,q_eftf_q,bounds_error=False, fill_value='extrapolate')
+									q_eftf = k(rad)
+								else:
+									q_eftf=-999
+
+								#imports EFTP q and radius data 
+								header_eftp_q, w_eftp_q, q_eftp_q, x_eftp_q, time_eftp_q, ier_eftp_q = ppfgts(pulse, "EFTP", "Q", row[4]*((t1-t0)/shape[1])+t0+40)
+								header_eftp_r, w_eftp_r, R_eftp_r, x_eftp_r, time_eftp_r, ier_eftp_r = ppfgts(pulse, "EFTP", "RMJO", row[4]*((t1-t0)/shape[1])+t0+40)
+								#if EFTP data is available and the radius of the NTM is within the radius predicted by EFTP
+								if len(q_eftp_q)>0 and len(R_eftp_r)>0 and rad<=np.max(R_eftp_r):
+									k = interpolate.interp1d(R_eftp_r,q_eftp_q,bounds_error=False, fill_value='extrapolate')
+									q_eftp = k(rad)
+								else:
+									q_eftp=-999
+
+								#appends to database that contains the modes in all pulses, and all_mode_list which contains the modes in just that pulse 
+								database.append([all_counter,pulse,row[2],row[3]*((f1-f0)/shape[0])+f0,row[4]*((t1-t0)/shape[1])+t0,rad,row[5],q_efit,q_eftm,q_eftf,q_eftp])
+								all_mode_list.append([all_counter,pulse,row[2],row[3]*((f1-f0)/shape[0])+f0,row[4]*((t1-t0)/shape[1])+t0,rad,row[5],q_efit,q_eftmq_eftf,q_eftp])
+								x=1 #logs that a new mode has been added to the database so the counter will increase
+
+			if x==1: #if a new mode has been recorded
+				all_counter+=1
+	
+	#------to output the modes present in each individual pulse------------
+	#turn off to save time and memory
+	all_mode_list=np.array(all_mode_list)
+	filename = f"modes_in_JPN{int(pulse)}.dat"
+	if len(all_mode_list)>0:
+		np.savetxt(filename,all_mode_list, fmt='%.5f')
+	#----------------------------------------------------------------------plotting final toroidal mode number image-------------------------------------------------------------------------------------
+	#final_mode_image = np.full(shape=shape,fill_value=-8)
+	#for row in all_mode_list:
+		#final_mode_image[round((row[3]-f0)*(shape[0]/(f1-f0)))][round((row[4]-t0)*(shape[0]/(t1-t0))]=row[2]
+	
+	#cmap = colors.ListedColormap(['white','dodgerblue','darkmagenta','darkcyan','green','deeppink','greenyellow','lightpink','blueviolet','red','blue','lime','magenta','cyan','gold','darkorange'])
+	#bounds = [-8.5,-7.5,-6.5,-5.5,-4.5,-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5] 
+	#norm = colors.BoundaryNorm(bounds, cmap.N)
+	#plt.imshow(final_mode_image,cmap=cmap, norm=norm, interpolation='nearest', extent=[t0, t1, f1/1000,  f0/1000], aspect='auto')
+	#cbar=plt.colorbar(ticks=[-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7],label='n')
+	#cbar.set_label('n', fontsize=20)
+	#cbar.ax.tick_params(labelsize=16)
+	#plt.gca().invert_yaxis()
+	#plt.xlabel('t (s)',fontsize=20)
+	#plt.ylabel('f (kHz)',fontsize=20)
+	#plt.xticks(fontsize=16)
+	#plt.yticks(fontsize=16)
+	#plt.show()
+	#---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------	
+
+
+#------------------saving database-------------------------------------
+database=np.array(database)
+if len(all_mode_list)>0:
+	np.savetxt('database.dat',all_mode_list, fmt='%.5f')
+#----------------------------------------------------------------------
+
+end = timeit.default_timer() #stops timer
+elapsed_time = end - start 
+print('time:',elapsed_time) 
