@@ -278,6 +278,7 @@ for row in pulse_times:
 	signal_no = np.arange(0,len(spectrum_array)) #numbers the pick-up coils 0-5
 	pairs = np.array(list(combinations(signal_no,2)))  #All pair combinations for the 6 probes 
 	relative_coil_pos = [] #initiallises array for the reative toroidal angle between coils 
+	all_phase = []
 	for pair in pairs:
 		#relative phase between two coils a and b, phi_(a,b) = arctan(Im(SaSb*)/Re(SaSb*)) where Sa and Sb are the convolution smoothed spectograms from coils a and b 
 		kernal=1/(11*11)*(np.ones((11,11))) #have to play around with size to find optimum, a square kernel with length of 11 matrix elemets was used 
