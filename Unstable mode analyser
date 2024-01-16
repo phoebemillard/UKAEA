@@ -366,7 +366,7 @@ for row in pulse_times:
 
 	#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 	#------------------grouping modes----------------------------------------------------------------------------------------------------------------------------------------------------
-	mode_list = mode_grouping(mode_matrix=mode_iamge,pad='no',pad_length=50,pad_value=100,non_mode_number=-8,square_length=21)
+	mode_list = mode_grouping(mode_matrix=mode_image,pad='no',pad_length=50,pad_value=100,non_mode_number=-8,square_length=21)
 	
 	#-----------further noise removal and appending to an array---------------------------------------------------------------------------------------------------------------------------------------------
 	unique=np.unique(mode_list[:,1]) #gives the conter index of each individual mode identified in during the pulse 
