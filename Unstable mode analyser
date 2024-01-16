@@ -82,7 +82,7 @@ def mode_grouping(mode_matrix,pad,pad_length,pad_value,non_mode_number,square_le
 									block_array[centres_list[row][0]+square_length,centres_list[row][1]+square_length] = 1 
 							#checks if block below and to the right has been looked at 
 							if block_array[centres_list[row][0]-square_length,centres_list[row][1]+square_length]==0:
-								if block_array[centres_list[row][0]-square_length,centres_list[row][1]+square_length] = 0:  
+								if block_array[centres_list[row][0]-square_length,centres_list[row][1]+square_length] == 0:  
 									new_centres.append([centres_list[row][0]-square_length,centres_list[row][1]+square_length])
 									block_array[centres_list[row][0]-square_length,centres_list[row][1]+square_length] = 1 
 							#checks if block above and to the left has been looked at 
@@ -205,7 +205,7 @@ for row in pulse_times:
 			header_frc, datw_frc, data_frc ,x_frc, time_frc, ier_frc = ppfget(pulse, "ICRH", "FRC")
 			header_frd, datw_frd, data_frd ,x_frd, time_frd, ier_frd = ppfget(pulse, "ICRH", "FRD")
 			header_fre, datw_fre, data_fre ,x_fre, time_fre, ier_fre = ppfget(pulse, "ICRH", "FRE")
-			time_ptot-=40 
+			time_icrh-=40 
 
 			#adds non zero ICRH antenna arrays to a bigger array
 			all_antenna = [] 
@@ -227,9 +227,9 @@ for row in pulse_times:
 			for pair in antenna_pairs:
 				differences.append(abs(all_antenna[pair[0]]-all_antenna[pair[1]])) #finds beat frequency difference
 			differences = np.array(np.unique(differences)[np.nonzero(np.unique(differences))]) #gives the unique beat ICRH frequencies
-			if len(icrh_time[icrh_power>0])>0: #only if ICRH is turned on in that pulse
-				icrh_min_time = np.min(icrh_time[icrh_power>0])
-				icrh_max_time = np.max(icrh_time[icrh_power>0])
+			if len(time_icrh[icrh_power>0])>0: #only if ICRH is turned on in that pulse
+				icrh_min_time = np.min(time_icrh[icrh_power>0])
+				icrh_max_time = np.max(time_icrh[icrh_power>0])
 			#--------------------------------------------------------------------------------------------------------------------------
 
 		#cuts spectrograms to only contian energy densty values within the relevent times and frequency ranges [t0,t1] and [f0,f1]
