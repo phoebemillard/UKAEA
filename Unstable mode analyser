@@ -346,7 +346,7 @@ for row in pulse_times:
 			mode_image[math.floor((diff-f0)*len(mode_image)/(f1-f0)-5):math.ceil((diff-f0)*len(mode_image)/(f1-f0)+5)][:,math.floor((icrh_min_time-t0)*len(mode_image[0])/(t1-t0)):math.ceil((icrh_max_time-t0)*len(mode_image[0])/(t1-t0))]=-8 #sets toroidal mode number matrix elements of ICRH signal to value outisde of n range 
 
 	#------------------grouping modes------------------------------------------------------------------------------------------------------------------------------
-	mode_list = mode_grouping(mode_matrix=mode_iamge,pad='yes',pad_length=50,pad_value=100,non_mode_number=-8,square_length=21)
+	mode_list = mode_grouping(mode_matrix=mode_image,pad='yes',pad_length=50,pad_value=100,non_mode_number=-8,square_length=21)
 	
 	#----------------------------removing beating------------------------------------------------------------------------------------------------------------------
 	#for all non-zero modes of non-zero frequency, they are replicated at interger multiples of frequency and toroidal mode number
