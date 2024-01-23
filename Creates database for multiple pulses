@@ -1,0 +1,111 @@
+import timeit
+start = timeit.default_timer() #starts timer
+from getdat import *
+import matplotlib.pyplot as plt
+from scipy.signal import get_window, spectrogram
+from scipy.fftpack import fft, fftfreq
+import numpy as np
+from ppf import ppfget
+from scipy import interpolate
+import math
+from scipy import interpolate
+from itertools import combinations
+from scipy import signal
+from matplotlib import colors
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy.signal import find_peaks
+from ppf import *
+
+#importing functions 
+from Tools import spectogram
+from Tools import max_energy_spectogram
+from Tools import toroidal_mode_number
+from Tools import icrh_antenna_removal
+from Tools import mode_grouping
+from Tools import beating_removal
+from Tools import noise_removal
+from Tools import database_output
+
+#--------------data settings-----------------------------------------------------------------------------------------------------------------------
+
+#imports test file of 251 JET pulse numbers (JPN):
+#file also contains interesting times at which stable AE have been identified by the antenna signal 
+good_pulses_times = np.loadtxt('good_times.dat',usecols=(0,1)) #column 0: JPN, column 1:Stable AE time
+good_pulses = np.unique(good_pulses_times[:,0]) #finds all of the pulse numbers 
+
+#creates array of the pulse numbers with the max min times in which stable AE were detected 
+pulse_times = []
+for pulse in good_pulses:
+	min_time = min(good_pulses_times[good_pulses_times[:,0]==pulse][:,1])-40 
+	max_time = max(good_pulses_times[good_pulses_times[:,0]==pulse][:,1])-40
+	pulse_times.append([pulse,min_time,max_time])
+pulse_times=np.array(pulse_times)
+
+#list of magnetic pick-up coils and their toroidal angles 
+coils = ['H302','H303','H305','T001','T002','T008']
+phi_t = [92.9,103.1,110.4,3.0,42.1,257.1]
+Phi_rad = np.radians(phi_t)
+
+#-------------other pulse number subsections---------------------------------------------------------------------------------------------------------
+#JPN where EFIT and EFTM are available 
+#pulse_times = [94627.0, 95272.0, 95672.0, 95675.0, 95958.0, 96851.0, 96852.0, 97771.0, 97773.0, 97813.0, 97892.0, 97896.0, 97899.0, 97900.0, 97976.0, 97977.0, 98885.0, 99164.0, 99205.0, 99596.0, 99777.0, 99884.0, 99886.0, 99908.0, 99946.0, 99948.0, 99960.0, 99962.0, 99964.0, 99969.0, 99970.0, 99972.0]
+
+#JPN where EFIT, EFTM, EFTF and EFTP are all availabe
+#pulse_times=[95272.0, 95675.0, 97892.0, 97896.0, 97899.0, 97900.0, 97976.0, 97977.0, 99596.0, 99777.0, 99884.0, 99886.0, 99908.0, 99948.0, 99960.0, 99962.0, 99964.0, 99969.0, 99970.0, 99972.0]
+
+All_counter=1 #starts counter for unstable modes detected
+database = [0,0,0,0,0,0,0,0,0,0,0] #initiates the database of unstable modes detected and analysed by the programme
+	      #database format: [mode_counter,JPN,toroidal_mode_number,frequency,time,radius,q,q_EFIT,q_EFTM,q_EFTF,q_EFTP]
+for row in pulse_times:
+	Pulse = row[0] #JPN
+	print(Pulse)
+	all_mode_list=[] #initiates the databse for unstable modes within each pulse
+	all_mode_matrix_list=[]
+	
+	Spectrum_array, t_0, t_1, f_0, f_1, Antenna_signal, ICRH_frequencies, ICRH_min_time, ICRH_max_time = spectogram(pulse=Pulse, coil_list=coils, window_length=6250, f0=0,f1=500,t0=None,t1=None)
+	
+	Max_amp, Top_percentage_energy_density = max_energy_spectogram(spectrum_array=Spectrum_array, top_percentage=3)
+	
+	Mode_image, Shape = toroidal_mode_number(spectrum_array=Spectrum_array, kernel_length=11, phi_rad=Phi_rad, min_n=-7, max_n=7,t0=t_0,t1=t_1,f0=f_0,f1=f_1,top_energy_dens_frac=Top_percentage_energy_density,max_amp_spec=Max_amp)
+
+	Mode_image = icrh_antenna_removal(mode_image=Mode_image,f0=f_0,f1=f_1,t0=t_0,t1=t_1,icrh_min_time=ICRH_min_time, icrh_max_time=ICRH_max_time, icrh_frequencies=ICRH_frequencies, antenna_data=Antenna_signal,min_n=-7)
+
+	Mode_list = mode_grouping(mode_matrix=Mode_image,pad='yes',pad_length=50,pad_value=100,min_n=-7,square_length=21)
+
+	Mode_image = beating_removal(mode_list=Mode_list, mode_image=Mode_image, min_n=-7, max_n=7)
+	
+	Mode_list = mode_grouping(mode_matrix=Mode_image,pad='yes',pad_length=50,pad_value=100,min_n=-7,square_length=21)
+	
+	Mode_list = noise_removal(mode_list=Mode_list,minimum_mode_length=8,minimum_mode_time=0.05,t0=t_0,t1=t_1,f0=f_0,f1=f_1,shape=Shape)
+
+	#------------------------------------------plots toroidal mode number image---------------------------------------------------------------
+	final_mode_image = np.full(shape=Shape,fill_value=-8)
+	for row in Mode_list:
+		final_mode_image[int(row[2])][int(row[3])]=row[1]
+	
+	cmap = colors.ListedColormap(['white','dodgerblue','darkmagenta','darkcyan','green','deeppink','greenyellow','lightpink','blueviolet','red','blue','lime','magenta','cyan','gold','darkorange'])
+	bounds = [-8.5,-7.5,-6.5,-5.5,-4.5,-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5] 
+	norm = colors.BoundaryNorm(bounds, cmap.N)
+	plt.imshow(final_mode_image,cmap=cmap, norm=norm, interpolation='nearest', extent=[t0, t1, f1/1000,  f0/1000], aspect='auto')
+	cbar=plt.colorbar(ticks=[-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7],label='n')
+	cbar.set_label('n', fontsize=20)
+	cbar.ax.tick_params(labelsize=16)
+	plt.gca().invert_yaxis()
+	plt.xlabel('t (s)',fontsize=20)
+	plt.ylabel('f (kHz)',fontsize=20)
+	plt.xticks(fontsize=16)
+	plt.yticks(fontsize=16)
+	plt.show()
+	#---------------------------------------------------------------------------------------------------------------------------
+
+	All_mode_list, All_counter = database_output(pulse=Pulse,mode_list=Mode_list,t0=t_0,t1=t_1,f0=f_0,f1=f_1,all_counter=All_counter)
+
+	database = database + All_mode_list
+
+database=np.array(database)
+del database[0]
+np.savetxt('database.dat',database, fmt='%.5f')
+
+end = timeit.default_timer() #stops timer
+elapsed_time = end - start 
+print('time:',elapsed_time) 
