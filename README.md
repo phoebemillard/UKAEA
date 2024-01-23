@@ -1,1 +1,1 @@
-Use Tools along with 'Creates database for multiple pulses' and 'Created database for one pulse'
+Use Tools along with 'Creates database for multiple pulses' and 'Creates database for one pulse'
