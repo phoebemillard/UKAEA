@@ -10,3 +10,5 @@ Creates database for multiple pulses:The code uses the functions in 'Tools' to o
 
 Creates database for one pulse: The code uses the functions in 'Tools' to output a database containing the times, frequencies, toroidal mode numbers, experimental q values and q values predicted by equillibrium reconstruction codes such as EFIT of instabilities present in one JET pulse
 
+Compares database to equillibrium reconstruction codes: Uses the database outputted using one or multiple JET pulses and calculates the relative error of the q profile predicted by EFIT, EFTM, EFTF and EFTP with respect to the experimenal q values calculated by the new programme. It can be used to show the relative error as a funtion of plasma radius or a histogram which can be used to compare the accuracy of the odfferent reconstruction codes. 
+
