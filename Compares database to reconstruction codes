@@ -1,0 +1,73 @@
+import timeit
+start = timeit.default_timer() #starts timer
+from getdat import *
+import matplotlib.pyplot as plt
+from scipy.signal import get_window, spectrogram
+from scipy.fftpack import fft, fftfreq
+import numpy as np
+from ppf import ppfget
+from scipy import interpolate
+import math
+from scipy import interpolate
+from itertools import combinations
+from scipy import signal
+from matplotlib import colors
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy.signal import find_peaks
+from ppf import *
+
+#database = np.loadtxt('database.dat')
+database = np.loadtxt('modes_in_JPN95272.dat')
+#database format [mode_counter,JPN,toroidal_mode_number,frequency,time,radius,q,q_EFIT,q_EFTM,q_EFTF,q_EFTP]
+
+#initiates arrays for the relative errors of each reconstruction code to be appended too
+#relative error = abs(q_reconstruction-q_experimental)/q_experimental
+#the q values predicted by the new programme are the experimental values
+efit_rel_err=[]
+eftm_rel_err=[]
+eftf_rel_err=[]
+eftp_rel_err=[]
+
+for row in database:
+	if row[7]!=-999: #if EFIT data was available
+		if row[6]!=0:
+			efit_rel_err.append([abs(row[7]-row[6])/row[6],row[5]]) 
+	if row[8]!=-999: #if EFTM data was available
+		if row[6]!=0:
+			eftm_rel_err.append([abs(row[8]-row[6])/row[6],row[5]])
+	if row[9]!=-999: #if EFTF data was available
+		if row[6]!=0:
+			eftf_rel_err.append([abs(row[9]-row[6])/row[6],row[5]])  
+	if row[10]!=-999: #if EFTP data was available
+		if row[6]!=0:
+			eftp_rel_err.append([abs(row[10]-row[6])/row[6],row[5]])
+efit_rel_err=np.array(efit_rel_err)
+eftm_rel_err=np.array(eftm_rel_err)
+eftp_rel_err=np.array(eftp_rel_err)
+eftf_rel_err=np.array(eftf_rel_err)
+
+#plotting histograms to compare the relative error of the 4 equillibrium reconstruction codes 
+plt.hist(efit_rel_err[:,0], bins=20, alpha=0.5,color='blue', label='EFIT')
+plt.hist(eftm_rel_err[:,0], bins=20, alpha=0.5,color='hotpink', label='EFTM')
+plt.hist(eftp_rel_err[:,0], bins=20, alpha=0.5,color='orange', label='EFTP')
+plt.hist(eftf_rel_err[:,0], bins=20, alpha=0.5,color='limegreen', label='EFTF')
+plt.yscale('log')
+plt.xlabel('Relative $q$ error')
+plt.ylabel('Frequency')
+plt.title('Comparing the relative error of EFIT reconstruction codes')
+plt.legend()
+plt.show()
+
+#plots a scatter graph to compare the relative error of the 4 equillibrium reconstruction codes as a function of plasma radius 
+plt.scatter(efit_rel_err[:,1],efit_rel_err[:,0],c='blue',label='EFIT')
+plt.scatter(eftm_rel_err[:,1],eftm_rel_err[:,0],c='hotpink',label='EFTM')
+plt.scatter(eftf_rel_err[:,1],eftf_rel_err[:,0],c='orange',label='EFTF')
+plt.scatter(eftp_rel_err[:,1],eftp_rel_err[:,0],c='limegreen',label='EFTP')
+plt.ylabel('Relative $q$ error')
+plt.xlabel('Major radius (m)')
+plt.legend()
+plt.show()
+
+end = timeit.default_timer() #stops timer
+elapsed_time = end - start 
+print('time:',elapsed_time) 
