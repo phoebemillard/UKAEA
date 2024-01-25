@@ -6,3 +6,7 @@ Overview of each file in this Final codes branch:
 
 Tools: Python file containing all of the functions required to identify unstable modes from JET magnetic data, determine their toroidal mode number and q value, and output this to a database
 
+Creates database for multiple pulses:The code uses the functions in 'Tools' to output a database containing the times, frequencies, toroidal mode numbers, experimental q values and q values predicted by equillibrium reconstruction codes such as EFIT of instabilities present in multiple JET pulses
+
+Creates database for one pulse: The code uses the functions in 'Tools' to output a database containing the times, frequencies, toroidal mode numbers, experimental q values and q values predicted by equillibrium reconstruction codes such as EFIT of instabilities present in one JET pulse
+
