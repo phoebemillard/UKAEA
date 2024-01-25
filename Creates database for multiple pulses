@@ -54,16 +54,20 @@ Phi_rad = np.radians(phi_t)
 #pulse_times=[95272.0, 95675.0, 97892.0, 97896.0, 97899.0, 97900.0, 97976.0, 97977.0, 99596.0, 99777.0, 99884.0, 99886.0, 99908.0, 99948.0, 99960.0, 99962.0, 99964.0, 99969.0, 99970.0, 99972.0]
 
 All_counter=1 #starts counter for unstable modes detected
-database = [0,0,0,0,0,0,0,0,0,0,0] #initiates the database of unstable modes detected and analysed by the programme
+database = [[0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0]] #initiates the database of unstable modes detected and analysed by the programme
 	      #database format: [mode_counter,JPN,toroidal_mode_number,frequency,time,radius,q,q_EFIT,q_EFTM,q_EFTF,q_EFTP]
 for row in pulse_times:
-	Pulse = row[0] #JPN
+	#Pulse = row[0] #JPN
+	Pulse = row
 	print(Pulse)
 	all_mode_list=[] #initiates the databse for unstable modes within each pulse
 	all_mode_matrix_list=[]
 	
 	Spectrum_array, t_0, t_1, f_0, f_1, Antenna_signal, ICRH_frequencies, ICRH_min_time, ICRH_max_time = spectogram(pulse=Pulse, coil_list=coils, window_length=6250, f0=0,f1=500,t0=None,t1=None)
 	
+	#the locations of the maximum energy density spectograms with values within the top 3% of energy densities are the prediction of the coherent mode locations
+	#trial with different limits to include fainter modes
+	#however increasing this limit will increase the amout of noise outputted to the final database 
 	Max_amp, Top_percentage_energy_density = max_energy_spectogram(spectrum_array=Spectrum_array, top_percentage=3)
 	
 	Mode_image, Shape = toroidal_mode_number(spectrum_array=Spectrum_array, kernel_length=11, phi_rad=Phi_rad, min_n=-7, max_n=7,t0=t_0,t1=t_1,f0=f_0,f1=f_1,top_energy_dens_frac=Top_percentage_energy_density,max_amp_spec=Max_amp)
@@ -75,7 +79,8 @@ for row in pulse_times:
 	Mode_image = beating_removal(mode_list=Mode_list, mode_image=Mode_image, min_n=-7, max_n=7)
 	
 	Mode_list = mode_grouping(mode_matrix=Mode_image,pad='yes',pad_length=50,pad_value=100,min_n=-7,square_length=21)
-	
+	Mode_list=np.array(Mode_list)
+
 	Mode_list = noise_removal(mode_list=Mode_list,minimum_mode_length=8,minimum_mode_time=0.05,t0=t_0,t1=t_1,f0=f_0,f1=f_1,shape=Shape)
 
 	#------------------------------------------plots toroidal mode number image---------------------------------------------------------------
@@ -86,7 +91,7 @@ for row in pulse_times:
 	cmap = colors.ListedColormap(['white','dodgerblue','darkmagenta','darkcyan','green','deeppink','greenyellow','lightpink','blueviolet','red','blue','lime','magenta','cyan','gold','darkorange'])
 	bounds = [-8.5,-7.5,-6.5,-5.5,-4.5,-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5] 
 	norm = colors.BoundaryNorm(bounds, cmap.N)
-	plt.imshow(final_mode_image,cmap=cmap, norm=norm, interpolation='nearest', extent=[t0, t1, f1/1000,  f0/1000], aspect='auto')
+	plt.imshow(final_mode_image,cmap=cmap, norm=norm, interpolation='nearest', extent=[t_0, t_1, f_1/1000,  f_0/1000], aspect='auto')
 	cbar=plt.colorbar(ticks=[-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7],label='n')
 	cbar.set_label('n', fontsize=20)
 	cbar.ax.tick_params(labelsize=16)
@@ -98,11 +103,12 @@ for row in pulse_times:
 	plt.show()
 	#---------------------------------------------------------------------------------------------------------------------------
 
-	All_mode_list, All_counter = database_output(pulse=Pulse,mode_list=Mode_list,t0=t_0,t1=t_1,f0=f_0,f1=f_1,all_counter=All_counter)
+	All_mode_list, All_counter = database_output(pulse=Pulse,mode_list=Mode_list,t0=t_0,t1=t_1,f0=f_0,f1=f_1,all_counter=All_counter,shape=Shape)
 
-	database = database + All_mode_list
+	database = np.concatenate((database, All_mode_list), axis=0)
 
 database=np.array(database)
+del database[0]
 del database[0]
 np.savetxt('database.dat',database, fmt='%.5f')
 
