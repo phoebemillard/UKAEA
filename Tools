@@ -89,6 +89,8 @@ def spectogram(pulse, coil_list, window_length, f0,f1,t0,t1):
 					t1 = np.max(time_nbi[nbi_power>0])-40
 			
 			#-----------------determines ICRH heating times and frequencies-------------------------------------------------------------
+#imports the ICRH and Antenna data and detwrmines the times and frequencies at which they would appear in the spectogram
+#These times and frequesncies are convcerted into the units of the spectogram matrix elememts so the signals cane be removed from the toroidal mode number matrix later
 			#reads in ICRH data from antennas A-E
 			header_fra, datw_fra, data_fra ,x_fra, time_fra, ier_fra = ppfget(pulse, "ICRH", "FRA") 
 			header_frb, datw_frb, data_frb ,x_frb, time_frb, ier_frb = ppfget(pulse, "ICRH", "FRB")
@@ -228,6 +230,10 @@ def toroidal_mode_number(spectrum_array, kernel_length, phi_rad, min_n, max_n,t0
 
 	all_phase=np.array(all_phase)
 
+
+
+
+
 	#-----------------------------least squares fit to find toroidal mode numbers---------------------------------------------------------------------------------------------------------------------------
 	modes=np.arange(min_n,max_n+1) #list of toroidal mode numbers in the range -7<=n<=7 
 
@@ -236,6 +242,10 @@ def toroidal_mode_number(spectrum_array, kernel_length, phi_rad, min_n, max_n,t0
 	for coil in relative_coil_pos:
 		relative_coil_pos_matrix.append(np.full(shape=all_phase[0].shape,fill_value=coil)) #matricies containing just one value at all positions
 	relative_coil_pos_matrix=np.array(relative_coil_pos_matrix)
+
+
+
+
 
 	#----------------------------------------------------------------finding minimum residuals and making toroidal mode number array--------------------------------------------------------------------------
 	#the maximum residual of a point would be (2*(max(rel_coil_pos))*max(mode))^2
@@ -299,6 +309,8 @@ def icrh_antenna_removal(mode_image,f0,f1,t0,t1,icrh_min_time, icrh_max_time, ic
 
 
 
+
+
 #--------------------------------------------------removing beating from toroidal mode number matrices---------------------------------------------------------------------------
 
 def beating_removal(mode_list, mode_image, min_n, max_n):
@@ -324,7 +336,7 @@ def beating_removal(mode_list, mode_image, min_n, max_n):
 #-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-#--------------functions-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#--------------grouping modes-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 #takes a toroidal mode number matrix and groups together the elements corresponding ot each individual mode
 #outputs an array containing the troidal mode number and positions of all the elements corresponding to each mode along with a counter which identifies each individual mode
@@ -347,7 +359,7 @@ def mode_grouping(mode_matrix,pad,pad_length,pad_value,min_n,square_length): #se
 				if mode_number ==0: #since 9=(n+1)/n, this doesnt work for n=0 so q is set to 0
 					q=0
 				else:
-					q=(mode_number+1)/mode_number #q for non zero toroidal mode number 
+					q=(abs(mode_number)+1)/abs(mode_number) #q for non zero toroidal mode number 
 				centres_list = [[0,0],[i-pad_length,j-pad_length]] #list of the matrix coordinates of the square_length x square_length centres, (the [0,0] is a fake one added to make the array 2D to append)
 				block_array = np.zeros(mode_matrix.shape) #creates empty array to track what square_length x square_length blocks have been looked at
 				block_array[i-pad_length][j-pad_length]=1 #sets the centre of the initial quare_length x square_length to 1
@@ -422,9 +434,12 @@ def mode_grouping(mode_matrix,pad,pad_length,pad_value,min_n,square_length): #se
 def noise_removal(mode_list,minimum_mode_length,minimum_mode_time,t0,t1,f0,f1,shape):
 	modes=np.unique(mode_list[:,0]) #gives the conter index of each individual mode identified in during the pulse 
 	for mode in modes:
-		(len(mode_list[mode_list[:,0]==mode]) <= minimum_mode_length or np.max(mode_list[mode_list[:,0]==mode][:,3]*((t1-t0)/shape[1])+t0) - np.min(mode_list[mode_list[:,0]==mode][:,3]*((t1-t0)/shape[1])+t0) <= minimum_mode_time or np.any((mode_list[mode_list[:,0]==mode][:,2]*((f1-f0)/shape[0])+f0 < 70000) & (mode_list[mode_list[:,0]==mode][:,1] == 0))):
+		if len(mode_list[mode_list[:,0]==mode]) <= minimum_mode_length:
 			mode_list = [row for row in mode_list if row[0] != mode]
-
+		else:
+			if np.max(mode_list[mode_list[:,0]==mode][:,3]*((t1-t0)/shape[1])+t0) - np.min(mode_list[mode_list[:,0]==mode][:,3]*((t1-t0)/shape[1])+t0) <= minimum_mode_time or any((mode_list[mode_list[:,0]==mode][:,2]*((f1-f0)/shape[0])+f0 < 70000) & (mode_list[mode_list[:,0]==mode][:,1] == 0)):
+				mode_list = [row for row in mode_list if row[0] != mode]
+		mode_list=np.array(mode_list)
 	return mode_list
 		
 #--------------------------------------------------------------------------------------------------------------------------------------------#
@@ -439,12 +454,13 @@ def noise_removal(mode_list,minimum_mode_length,minimum_mode_time,t0,t1,f0,f1,sh
 #if the q values predicted by EFIT, EFTM, EFTP and EFTF are available they are added to the database, if not its set to -999 too
 #imput mode_list in format [mode_counter,mode_number,freq_matrix_element,time_matrix_element,q]
 
-def database_output(pulse,mode_list,t0,t1,f0,f1,all_counter):
+def database_output(pulse,mode_list,t0,t1,f0,f1,all_counter,shape):
 	all_mode_list=[]
 	modes=np.unique(mode_list[:,0]) #gives the conter index of each individual mode identified in during the pulse 
 	for mode in modes:
 		#for alfevn eigenmodes (f>=70kHz)
 		if all(mode_list[mode_list[:,0]==mode][:,2]*((f1-f0)/shape[0])+f0)>=70000:
+
 			for row in mode_list[mode_list[:,0]==mode]: #for each matrix element bellonging to that mode
 				all_mode_list.append([all_counter,pulse,row[1],row[2]*((f1-f0)/shape[0])+f0,row[3]*((t1-t0)/shape[1])+t0,-999,row[4],-999,-999,-999,-999])
 		
@@ -457,8 +473,8 @@ def database_output(pulse,mode_list,t0,t1,f0,f1,all_counter):
 				if len(rotation)>0 and len(radius)>0: #if rotation data is available 
 					#interpolates to find the radius at which the local rotation frequency equals toroidal mode number*NTM frequency 
 					#plasma rotation frequency given in angular freqeuncy to divided by 2pi to get frequency
-					interp = interpolate.interp1d(rotation/(2*np.pi),radius,bounds_error=False, fill_value='extrapolate') 
-					rad=interp(row[2]/row[1])
+					interp = interpolate.interp1d(rotation/(2*np.pi),radius,bounds_error=False, fill_value='extrapolate')
+					rad=interp(row[2]/row[1]) #freqeucny over toroidal mode number 
 					if rad>=2.8 and rad<=3.9: #if the radius is within the torus size 
 
 						#imports EFIT q and radius data 
@@ -506,11 +522,11 @@ def database_output(pulse,mode_list,t0,t1,f0,f1,all_counter):
 						
 					else: #if the estimated NTM radius was not inside the radius of the torus 
 					      #probbaly means that the potential NTM is not an NTM 
-						rad,q_EFIT,q_EFTM,q_EFTF,q_EFTP=-999
+						rad,q_efit,q_eftm,q_eftf,q_eftp=-999,-999,-999,-999,-999
 				else: #is no plasma rotation frequency is available 
-					rad,q_EFIT,q_EFTM,q_EFTF,q_EFTP=-999
+					rad,q_efit,q_eftm,q_eftf,q_eftp=-999,-999,-999,-999,-999
 			
-			all_mode_list.append([all_counter,pulse,row[1],row[2]*((f1-f0)/shape[0])+f0,row[3]*((t1-t0)/shape[1])+t0,rad,row[4],q_efit,q_eftmq_eftf,q_eftp])
+				all_mode_list.append([all_counter,pulse,row[1],row[2]*((f1-f0)/shape[0])+f0,row[3]*((t1-t0)/shape[1])+t0,rad,row[4],q_efit,q_eftm,q_eftf,q_eftp])
 		all_counter+=1
 	
 	return all_mode_list, all_counter
