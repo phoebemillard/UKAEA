@@ -14,5 +14,9 @@ Compares database to equillibrium reconstruction codes: Uses the database output
 
 Unstable mode analyser: Is an earlier version of 'Creates database for multiple pulses' in which the code has not been sperated into functions which are imorted in.
 
+All_peaks: Is an earlier code that identifies the position of instabilities in a time-freuqncy plane of a spectogram during one fusion pulse. It does not caculates the toroidal mode number but does attempt to group together the matrox elements belonging to each individual mode in the spectogram but doesnt quite do it successfully
+
+Mode_tracking2: is an earlier version of All_peaks 
+
 
 
